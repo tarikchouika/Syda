@@ -1,0 +1,17 @@
+# dependencies
+node_modules/
+
+# python
+__pycache__/
+*.pyc
+
+# secrets / environment
+.env
+.env.*
+
+# cloudflare
+.wrangler/
+
+# os / logs
+.DS_Store
+*.log

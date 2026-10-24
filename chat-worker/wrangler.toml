@@ -1,0 +1,10 @@
+name = "syda-chat"
+main = "src/index.js"
+compatibility_date = "2026-09-20"
+account_id = "02fcf95818efed008f495dd6e02c3ef6"
+
+[ai]
+binding = "AI"
+
+[observability]
+enabled = false
