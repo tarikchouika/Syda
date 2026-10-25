@@ -1,0 +1,27 @@
+{
+  "appId": "com.syda.store",
+  "appName": "صيدة - Syda",
+  "webDir": "www",
+  "server": {
+    "url": "https://syda.pages.dev",
+    "androidScheme": "https",
+    "cleartext": false
+  },
+  "android": {
+    "allowMixedContent": false,
+    "backgroundColor": "#06452f"
+  },
+  "plugins": {
+    "SplashScreen": {
+      "launchShowDuration": 2200,
+      "launchAutoHide": true,
+      "backgroundColor": "#06452f",
+      "androidScaleType": "CENTER_CROP",
+      "showSpinner": false
+    },
+    "StatusBar": {
+      "overlaysWebView": true,
+      "style": "DARK"
+    }
+  }
+}

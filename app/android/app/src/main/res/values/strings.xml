@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">صيدة - Syda</string>
+    <string name="title_activity_main">صيدة - Syda</string>
+    <string name="package_name">com.syda.store</string>
+    <string name="custom_url_scheme">com.syda.store</string>
+</resources>

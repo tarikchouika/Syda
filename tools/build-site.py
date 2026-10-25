@@ -100,7 +100,7 @@ def product_json_ld(p, first_price):
 PRODUCT_TMPL = """<!doctype html><html lang="ar" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="description" content="{meta_desc}">
 <title>{name} | صيدة</title>
-<link rel="stylesheet" href="/assets/style.css"><link rel="icon" href="/assets/favicon.png">
+<meta name="theme-color" content="#06452f"><link rel="stylesheet" href="/assets/style.css"><link rel="icon" type="image/png" href="/assets/favicon.png"><link rel="apple-touch-icon" href="/assets/apple-touch-icon.png">
 <link rel="canonical" href="https://syda.pages.dev/products/{pid}.html">
 <meta name="robots" content="index,follow">
 <meta property="og:type" content="product">
@@ -125,20 +125,22 @@ PRODUCT_TMPL = """<!doctype html><html lang="ar" dir="rtl"><head><meta charset="
 <article class="info">
 <span class="cat-pill" data-cat="{cat}">{cat_ar}</span>
 <h1>{name}</h1>
+<div class="buybox">
 <div class="price-row">
 <div class="price">{price}</div>
 <span class="old-price" hidden></span>
 <span class="save-badge" hidden></span>
 </div>
 {tiers_block}
-
 <div class="notice">شحن 28 ر.س — شحن مجاني للطلبات فوق 500 ر.س</div>
 <div class="notice">الدفع عند الاستلام أو الدفع المسبق مع خصم 15%</div>
 <div class="trust-row"><span>🚚 توصيل سريع</span><span>🔒 دفع آمن</span><span>↩️ إرجاع خلال 15 يوم</span></div>
-<button class="btn add btn-lg" id="a">أضف إلى السلة</button>
+<button class="btn add btn-lg" id="a">🛒 أضف إلى السلة</button>
+</div>
 <div class="description"><h2>وصف المنتج</h2>{desc_ps}</div>
 </article>
 </section>
+<div class="mobile-buybar"><span class="price" id="mbPrice">{price}</span><button class="btn add btn-lg" onclick="addProduct()">🛒 أضف إلى السلة</button></div>
 <section class="related" id="related">
 <h2>منتجات مشابهة</h2>
 <div class="grid" id="relatedGrid"><noscript>{noscript_cards}</noscript></div>
@@ -146,8 +148,9 @@ PRODUCT_TMPL = """<!doctype html><html lang="ar" dir="rtl"><head><meta charset="
 </main>
 <section class="featurestrip">
 <div class="feature"><div class="icon">🚚</div><b>شحن مجاني</b><span>توصيل مجاني للطلبات فوق 500 ر.س</span></div>
-<div class="feature"><div class="icon">🔒</div><b>دفع آمن</b><span>معاملات آمنة ومشفرة 100%</span></div>
-<div class="feature"><div class="icon">↩️</div><b>إرجاع 15 يوم</b><span>إرجاع سهل خلال 15 يوماً</span></div>
+<div class="feature"><div class="icon">💰</div><b>دفع عند الاستلام</b><span>ادفع نقداً عند استلام طلبك بكل ثقة</span></div>
+<div class="feature"><div class="icon">↩️</div><b>إرجاع 15 يوم</b><span>إرجاع واستبدال سهل خلال 15 يوماً</span></div>
+<div class="feature"><div class="icon">💬</div><b>دعم سريع</b><span>فريقنا جاهز لمساعدتك في أي وقت</span></div>
 </section>
 <div class="order-modal" id="orderModal">
 <div class="order-panel">
@@ -186,7 +189,7 @@ const p=document.querySelector('.info .price');if(p)p.textContent=unit>0?__fmt(u
 const oe=document.querySelector('.old-price'),se=document.querySelector('.save-badge');
 if(old>unit&&unit>0){{if(oe){{oe.hidden=false;oe.textContent=__fmt(old)}}if(se){{se.hidden=false;se.textContent=(__isEn()?'Save ':'وفر ')+Math.round((1-unit/old)*100)+'%'}}}}
 else{{if(oe)oe.hidden=true;if(se)se.hidden=true}}
-const q=Math.max(1,Number(__tier)||1);const tv=document.getElementById('totalVal');if(tv)tv.textContent=__fmt(unit*q);
+const q=Math.max(1,Number(__tier)||1);const tv=document.getElementById('totalVal');if(tv)tv.textContent=__fmt(unit*q);const mb=document.getElementById('mbPrice');if(mb)mb.textContent=unit>0?__fmt(unit):'';
 document.querySelectorAll('.tier-chip').forEach(ch=>ch.classList.toggle('active',ch.dataset.tier===__tier));}}
 function __pickTier(k){{__tier=String(k);__renderPrice()}}
 let cart=(function(){{try{{const raw=JSON.parse(localStorage.getItem('sayda-cart')||'[]');const out=(Array.isArray(raw)?raw:[]).map(x=>{{if(!x)return x;if(x.price!=null&&typeof x.price==='object'){{const t=Object.values(x.price).filter(v=>v&&typeof v.price==='number');if(t.length){{const lo=t.reduce((a,b)=>a.price<b.price?a:b);return{{id:x.id,name:x.name,nameEn:x.nameEn||x.name,price:lo.price,qty:x.qty||1}}}}}}return x}}).filter(x=>x&&Number.isFinite(Number(x.price)));return out}}catch(e){{return[]}}}})();
@@ -203,7 +206,7 @@ const om=document.getElementById('orderModal');if(om)om.onclick=e=>{{if(e.target
 const esc=v=>String(v==null?'':v).replace(/[&<>"']/g,c=>({{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}}[c]));
 window.__related = {related_json};
 function __renderRelated(){{const wrap=document.getElementById('relatedGrid');if(!wrap)return;const en=__isEn();const t=document.querySelector('.related h2');if(t)t.textContent=en?'You may also like':'منتجات مشابهة';if(!window.__related||!window.__related.length){{wrap.innerHTML='';const sec=document.getElementById('related');if(sec)sec.style.display='none';return}}
-wrap.innerHTML=window.__related.map(r=>{{const nm=en?(r.nameEn||r.name):r.name;const link='/products/'+encodeURIComponent(r.id)+'.html';return '<article class="card"><a class="card-img" href="'+link+'"><img loading="lazy" src="'+esc(r.medium)+'" alt="'+esc(nm)+'">'+(r.save?'<span class="save-chip">'+r.save+'%</span>':'')+'</a><div class="body"><h3><a href="'+link+'">'+esc(nm)+'</a></h3><div class="price">'+__fmt(r.price)+'</div><a class="btn" href="'+link+'">'+(en?'View details':'عرض التفاصيل')+'</a><button class="add" data-id="'+esc(r.id)+'">'+(en?'Add to cart':'أضف للسلة')+'</button></div></article>'}}).join('');}}
+wrap.innerHTML=window.__related.map(r=>{{const nm=en?(r.nameEn||r.name):r.name;const link='/products/'+encodeURIComponent(r.id)+'.html';return '<article class="card"><div class="card-media"><a class="card-img" href="'+link+'"><img loading="lazy" src="'+esc(r.medium)+'" alt="'+esc(nm)+'">'+(r.save?'<span class="save-chip">'+r.save+'%</span>':'')+'</a><button class="add quick-add" data-id="'+esc(r.id)+'" aria-label="'+(en?'Add to cart':'أضف للسلة')+'">+</button></div><div class="body"><h3><a href="'+link+'">'+esc(nm)+'</a></h3><div class="price">'+__fmt(r.price)+'</div><div class="card-actions"><a class="btn" href="'+link+'">'+(en?'View details':'عرض التفاصيل')+'</a><button class="add" data-id="'+esc(r.id)+'">'+(en?'Add to cart':'أضف للسلة')+'</button></div></div></article>'}}).join('');}}
 function __wireRelated(){{const wrap=document.getElementById('relatedGrid');if(!wrap)return;wrap.onclick=e=>{{const b=e.target.closest('.add');if(!b)return;const r=(window.__related||[]).find(x=>x.id===b.dataset.id);if(!r)return;const u=Number(r.price)||0;if(!u){{alert(__isEn()?'This product is priced on request. Please contact us.':'هذا المنتج سعره عند الطلب. تواصل معنا لمعرفة السعر.');return}}const old=cart.find(y=>y.id===r.id);if(old)old.qty=(old.qty||1)+1;else cart.push({{id:r.id,name:r.name,nameEn:r.nameEn||r.name,price:u,qty:1}});save();openOrder();}}}}
 function __renderCrumbs(){{const c=document.querySelector('.crumbs');if(!c)return;const en=__isEn(),home=en?'Home':'الرئيسية',det=en?'Product details':'تفاصيل المنتج';const cat=encodeURIComponent(c.dataset.cat||'');const lab=en?(c.dataset.caten||c.dataset.catlabel):c.dataset.catlabel;c.innerHTML='<a href="/">'+home+'</a> ← '+(cat?'<a href="/?cat='+cat+'">'+lab+'</a> ← ':'')+'<span>'+det+'</span>';}}
 function __initPage(){{__show(0);__renderPrice();__renderCrumbs();__renderRelated();__wireRelated();
@@ -221,8 +224,7 @@ save();
 </html>
 """
 
-CATEGORY_TMPL = """<!doctype html><html lang="ar" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="description" content="{cat_ar} من متجر صيدة — منتجات مختارة بعناية بأسعار منافسة."><title>{cat_ar} | صيدة</title><link rel="canonical" href="https://syda.pages.dev/categories/{cat}.html"><meta property="og:type" content="website"><meta property="og:site_name" content="صيدة"><meta property="og:title" content="{cat_ar} | صيدة"><meta property="og:description" content="{cat_ar} من متجر صيدة — منتجات مختارة بعناية بأسعار منافسة."><meta property="og:url" content="https://syda.pages.dev/categories/{cat}.html"><meta property="og:image" content="https://syda.pages.dev/assets/logo.png"><meta name="twitter:card" content="summary_large_image"><link rel="icon" type="image/png" href="/assets/favicon.png"><link rel="stylesheet" href="/assets/style.css"></head><body><header></header><main class="wrap"><section class="hero"><h1 id="heroTitle">{cat_ar}</h1><p id="heroSubtitle">تصفح منتجات هذا القسم بالكامل</p></section><h2 id="categoriesTitle">الأقسام</h2><div class="catalog-controls"><div class="catselect">🛍️ <label id="categoryLabel" for="catselect">اختر قسمًا</label><select id="catselect"><option value="">كل الأقسام</option></select></div><label class="sort-control" for="sort"><span id="sortLabel">ترتيب النتائج</span><select id="sort"><option value="default">الترتيب الافتراضي</option><option value="low">السعر: من الأقل للأعلى</option><option value="high">السعر: من الأعلى للأقل</option><option value="name">الاسم</option></select></label></div><h2><span id="productsTitle">المنتجات</span> <small id="shown"></small></h2><section class="grid" id="grid" aria-live="polite"></section><nav id="pagination" class="pagination" aria-label="ترقيم صفحات المنتجات"></nav></main><button class="cartbar" onclick="openCart()">السلة (<span data-count>0</span>)</button><div class="modal" id="modal"><div class="panel"><button onclick="closeCart()">×</button><h2>السلة والطلب</h2><div id="cart"></div></div></div><section class="featurestrip"><div class="feature"><div class="icon">🚚</div><b>شحن مجاني</b><span>توصيل مجاني للطلبات فوق 500 ر.س</span></div><div class="feature"><div class="icon">🔒</div><b>دفع آمن</b><span>معاملات آمنة ومشفرة 100%</span></div><div class="feature"><div class="icon">↩️</div><b>إرجاع 15 يوم</b><span>إرجاع سهل خلال 15 يوماً</span></div></section><footer class="site-footer"><img src="/assets/logo.png" alt="صيدة"><div>صيدة — تسوق بثقة</div><nav class="footer-links"><a href="/legal/privacy-terms.html">سياسة الخصوصية والشروط</a><a href="/legal/shipping-returns.html">الشحن والاستبدال والاسترجاع</a></nav><a class="footer-contact" href="/legal/contact.html">تواصل معنا</a></footer><script>window.SAYDA_CATEGORY='{cat}';</script><script src="/assets/app.js"></script><script src="/assets/site-ui.js"></script><script src="/assets/chat.js" defer></script></body></html>
-"""
+CATEGORY_TMPL = """<!doctype html><html lang="ar" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="description" content="{cat_ar} من متجر صيدة — منتجات مختارة بعناية بأسعار منافسة."><meta name="theme-color" content="#06452f"><title>{cat_ar} | صيدة</title><link rel="canonical" href="https://syda.pages.dev/categories/{cat}.html"><meta property="og:type" content="website"><meta property="og:site_name" content="صيدة"><meta property="og:title" content="{cat_ar} | صيدة"><meta property="og:description" content="{cat_ar} من متجر صيدة — منتجات مختارة بعناية بأسعار منافسة."><meta property="og:url" content="https://syda.pages.dev/categories/{cat}.html"><meta property="og:image" content="https://syda.pages.dev/assets/logo.png"><meta name="twitter:card" content="summary_large_image"><link rel="icon" type="image/png" href="/assets/favicon.png"><link rel="apple-touch-icon" href="/assets/apple-touch-icon.png"><link rel="stylesheet" href="/assets/style.css"></head><body><header></header><main class="wrap"><section class="hero"><h1 id="heroTitle">{cat_ar}</h1><p id="heroSubtitle">تصفح منتجات هذا القسم بالكامل</p><div class="hero-chips"><span data-ar="🚚 توصيل سريع لكل المدن" data-en="🚚 Fast nationwide delivery">🚚 توصيل سريع لكل المدن</span><span data-ar="💰 الدفع عند الاستلام" data-en="💰 Cash on delivery">💰 الدفع عند الاستلام</span><span data-ar="⭐ منتجات مضمونة" data-en="⭐ Guaranteed products">⭐ منتجات مضمونة</span></div></section><h2 id="categoriesTitle">الأقسام</h2><section class="cats-tiles" id="catsTiles"></section><div class="catalog-controls"><div class="catselect">🛍️ <label id="categoryLabel" for="catselect">اختر قسمًا</label><select id="catselect"><option value="">كل الأقسام</option></select></div><label class="sort-control" for="sort"><span id="sortLabel">ترتيب النتائج</span><select id="sort"><option value="default">الترتيب الافتراضي</option><option value="low">السعر: من الأقل للأعلى</option><option value="high">السعر: من الأعلى للأقل</option><option value="name">الاسم</option></select></label></div><h2 id="products"><span id="productsTitle">المنتجات</span> <small id="shown"></small></h2><section class="grid" id="grid" aria-live="polite"></section><nav id="pagination" class="pagination" aria-label="ترقيم صفحات المنتجات"></nav></main><button class="cartbar" onclick="openCart()">السلة (<span data-count>0</span>)</button><div class="modal" id="modal"><div class="panel"><button onclick="closeCart()">×</button><h2>السلة والطلب</h2><div id="cart"></div></div></div><section class="featurestrip"><div class="feature"><div class="icon">🚚</div><b>شحن مجاني</b><span>توصيل مجاني للطلبات فوق 500 ر.س</span></div><div class="feature"><div class="icon">💰</div><b>دفع عند الاستلام</b><span>ادفع نقداً عند استلام طلبك بكل ثقة</span></div><div class="feature"><div class="icon">↩️</div><b>إرجاع 15 يوم</b><span>إرجاع واستبدال سهل خلال 15 يوماً</span></div><div class="feature"><div class="icon">💬</div><b>دعم سريع</b><span>فريقنا جاهز لمساعدتك في أي وقت</span></div></section><footer class="site-footer"></footer><script>window.SAYDA_CATEGORY='{cat}';</script><script src="/assets/app.js"></script><script src="/assets/site-ui.js"></script><script src="/assets/chat.js" defer></script></body></html>"""
 
 
 def _num(x):
@@ -269,11 +271,11 @@ def build_product_page(p, related):
     thumbs = "".join(f'<img src="{esc(i["medium"])}" onclick="setImage(this.src)" alt="{esc(name)}" loading="lazy">' for i in imgs)
 
     noscript_cards = "".join(
-        f'<article class="card"><a class="card-img" href="/products/{esc(r["id"])}.html">'
+        f'<article class="card"><div class="card-media"><a class="card-img" href="/products/{esc(r["id"])}.html">'
         f'<img src="{esc(r["medium"])}" alt="{esc(r["name"])}">'
         + (f'<span class="save-chip">{r["save"]}%</span>' if r.get("save") else "")
-        + f'</a><div class="body"><h3><a href="/products/{esc(r["id"])}.html">{esc(r["name"])}</a></h3>'
-          f'<div class="price">{fmt(r["price"])} ر.س</div><a class="btn" href="/products/{esc(r["id"])}.html">عرض التفاصيل</a></div></article>'
+        + f'</a></div><div class="body"><h3><a href="/products/{esc(r["id"])}.html">{esc(r["name"])}</a></h3>'
+          f'<div class="price">{fmt(r["price"])} ر.س</div><a class="btn" href="/products/{esc(r["id"])}.html">عرض التفاصيل</a></div></div></article>'
         for r in related)
 
     product_obj = dict(p)

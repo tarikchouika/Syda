@@ -1,0 +1,93 @@
+name: Build Android App
+
+on:
+  push:
+    branches: [main]
+    paths: ['site/**', 'app/**', '.github/workflows/android.yml']
+  workflow_dispatch:
+
+concurrency:
+  group: android-release
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install dependencies & sync Capacitor
+        working-directory: app
+        run: |
+          npm ci
+          npx cap sync android
+
+      - name: Bump version from run number
+        run: |
+          sed -i "s/versionCode [0-9]*/versionCode ${GITHUB_RUN_NUMBER}/" app/android/app/build.gradle
+          sed -i "s/versionName \"[^\"]*\"/versionName \"1.${GITHUB_RUN_NUMBER}\"/" app/android/app/build.gradle
+          grep -n "versionCode\|versionName" app/android/app/build.gradle
+
+      - name: Restore release keystore
+        run: printf '%s' "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > app/android/syda-release.keystore
+
+      - name: Build signed release APK
+        working-directory: app/android
+        run: |
+          chmod +x gradlew
+          ./gradlew assembleRelease --no-daemon \
+            -Pandroid.injected.signing.store.file=$PWD/syda-release.keystore \
+            -Pandroid.injected.signing.store.password='${{ secrets.KEYSTORE_PASSWORD }}' \
+            -Pandroid.injected.signing.key.alias='${{ secrets.KEY_ALIAS }}' \
+            -Pandroid.injected.signing.key.password='${{ secrets.KEY_PASSWORD }}'
+
+      - name: Verify signature & prepare asset
+        run: |
+          cp app/android/app/build/outputs/apk/release/app-release.apk syda-store.apk
+          APKSIGNER=$(ls $ANDROID_HOME/build-tools/*/apksigner | head -1)
+          CERT_SHA256=$($APKSIGNER verify --print-certs syda-store.apk | grep "SHA-256 digest" | head -1 | sed 's/.*: //' | tr -d ' ')
+          echo "CERT_SHA256=$CERT_SHA256" >> "$GITHUB_ENV"
+          sha256sum syda-store.apk | tee syda-store.apk.sha256
+          ls -lh syda-store.apk
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: syda-store-apk
+          path: syda-store.apk
+
+      - name: Publish release (permanent latest link)
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release delete latest-app --cleanup-tag -y || true
+          gh release create latest-app syda-store.apk syda-store.apk.sha256 \
+            --title "📱 تطبيق صيدة — آخر إصدار" \
+            --notes "الإصدار 1.${GITHUB_RUN_NUMBER} — $(date -u +'%Y-%m-%d')
+
+          ## 🔗 الرابط الدائم (آخر تحديث دائماً)
+          https://github.com/tarikchouika/Syda/releases/latest/download/syda-store.apk
+
+          ## 🔒 بصمة شهادة التوقيع (SHA-256)
+          \`${{ env.CERT_SHA256 }}\`
+
+          المفتاح الرسمي صالح حتى 2056 — توقيع ثابت لكل الإصدارات.
+          دليل التثبيت وتجاوز Play Protect: https://syda.pages.dev/app" \
+            --latest

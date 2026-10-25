@@ -12,6 +12,15 @@ __pycache__/
 # cloudflare
 .wrangler/
 
+# android build artifacts
+app/android/.gradle/
+app/android/app/build/
+app/android/build/
+app/android/capacitor-cordova-android-plugins/build/
+app/android/local.properties
+*.keystore
+*.jks
+
 # os / logs
 .DS_Store
 *.log
