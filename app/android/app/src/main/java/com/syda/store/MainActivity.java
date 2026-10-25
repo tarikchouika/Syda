@@ -28,12 +28,6 @@ public class MainActivity extends BridgeActivity {
         if (hasFocus) hideSystemBars();
     }
 
-    @Override
-    protected void onResume() {
-        super.onResume();
-        hideSystemBars();
-    }
-
     private void hideSystemBars() {
         if (Build.VERSION.SDK_INT >= 30) {
             // Modern API (Android 11+; required on Android 15 edge-to-edge)
