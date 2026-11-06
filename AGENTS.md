@@ -10,6 +10,7 @@
 | `AGENTS.md` (هذا الملف) | القواعد الحاكمة والاتفاقيات |
 | `docs/DESIGN-SYSTEM.md` | نظام التصميم: الألوان، الخطوط، المكونات |
 | `docs/APP-GUIDE.md` | تطبيق الأندرويد: البناء، التوقيع، النشر |
+| `docs/SUPPORT-BOT.md` | بوت دعم تيليغرام: المعمارية، الأدوار، الأوامر، عقد API |
 | `README.md` | نظرة عامة + خطوط الأنابيب (Pipelines) |
 | `worklog.md` (بيئة العمل) | سجل تسلسلي لكل المهام المنجزة |
 
@@ -19,10 +20,11 @@
 2. **اللوغو مقدس**: `/assets/logo.png` هو مصدر أيقونة التطبيق والفاڤيكون — لا يُعدّل ولا يُستبدل.
 3. **سلة الطلب ومسار الشراء** (`/api/order` → `api.dukan.shop`) يعمل ويُختبر بايت-ببايت — أي تعديل على `site-ui.js` يجب أن يحافظ على الدوال: `saydaCartTotals`, `saydaBuildOrder`, `saydaSubmitOrder`, `saydaShowInvoice`, `saydaBindCity`.
 4. **الشات بوت** يعمل عبر Worker منفصل (`chat-worker/`) بنموذج `gpt-oss-120b` مع كتالوج حقيقي — لا تغيير في بروتوكول `@@PRODUCTS:` أو آلية التحقق من الهلوسة.
-5. **ثنائية اللغة AR/EN** عبر `localStorage('sayda-lang')` + حدث `languagechange` — كل نص جديد يُضاف يجب أن يدعم اللغتين (سمات `data-ar`/`data-en` للنصوص الثابتة).
-6. **الوضع الداكن** (`body.dark`) مدعوم — أي مكون جديد يجب أن يُختبر فيه.
-7. **التطبيق الأندرويد موقّع بمفتاح 30 سنة** — المفتاح في GitHub Secrets (`KEYSTORE_BASE64` + كلمات المرور) ولا يُولَّد من جديد أبداً. نسخة احتياطية لدى المالك: `syda-signing-kit/`.
-8. **رابط التحميل الدائم**: `https://github.com/tarikchouika/Syda/releases/latest/download/syda-store.apk` — مذكور في الموقع (`/app` والفوتر) — لا يتغير.
+5. **بوت الدعم البشري** (@sydasupports_bot) عبر Pages Functions نفسها (`site/functions/api/support/` + `telegram.js`) + KV `syda_support` — التوكن Pages secret فقط؛ الزائر لا يحتاج تيليغرام (انظر `docs/SUPPORT-BOT.md`).
+6. **ثنائية اللغة AR/EN** عبر `localStorage('sayda-lang')` + حدث `languagechange` — كل نص جديد يُضاف يجب أن يدعم اللغتين (سمات `data-ar`/`data-en` للنصوص الثابتة).
+7. **الوضع الداكن** (`body.dark`) مدعوم — أي مكون جديد يجب أن يُختبر فيه.
+8. **التطبيق الأندرويد موقّع بمفتاح 30 سنة** — المفتاح في GitHub Secrets (`KEYSTORE_BASE64` + كلمات المرور) ولا يُولَّد من جديد أبداً. نسخة احتياطية لدى المالك: `syda-signing-kit/`.
+9. **رابط التحميل الدائم**: `https://github.com/tarikchouika/Syda/releases/latest/download/syda-store.apk` — مذكور في الموقع (`/app` والفوتر) — لا يتغير.
 
 ## 🏗️ بنية المستودع
 
