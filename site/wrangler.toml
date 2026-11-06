@@ -1,0 +1,10 @@
+name = "syda"
+pages_build_output_dir = "."
+compatibility_date = "2026-09-20"
+
+[[kv_namespaces]]
+binding = "SUPPORT_KV"
+id = "d3449bcd40334d6892cab214fd03f6cf"
+
+[observability]
+enabled = false

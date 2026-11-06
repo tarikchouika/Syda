@@ -6,6 +6,7 @@
   "use strict";
 
   const WORKER_URL = "https://syda-chat.balbolghol-ai.workers.dev/chat";
+  const SUPPORT_URL = "/api/support"; // same-origin Pages Function (Telegram relay)
   const MAX_HISTORY = 10;
 
   const AR = {
@@ -14,7 +15,7 @@
     online: "متصل الآن",
     placeholder: "اكتب سؤالك عن أي منتج…",
     send: "إرسال",
-    welcome: "مرحباً بك في متجر صيدة! 🌟\nأنا مساعدك الذكي — اسألني عن أي منتج تحتاجه بأي لغة، وسأدلك على المنتج المناسب فوراً.",
+    welcome: "مرحباً بك في متجر صيدة! 🌟\nأنا مساعدك الذكي — اسألني عن أي منتج تحتاجه بأي لغة، وسأدلك على المنتج المناسب فوراً.\n\n🧑‍💼 ولمخاطبة موظف مباشرة اضغط زر «التحدث مع خدمة العملاء» بالأسفل.",
     suggestions: ["عروض وخصومات", "منتجات للسيارة", "أدوات المطبخ", "العناية بالبشرة والشعر"],
     viewDetails: "عرض التفاصيل",
     addToCart: "أضف للسلة",
@@ -28,6 +29,18 @@
     brandAlt: "صيدة",
     priceOnRequest: "السعر عند الطلب",
     onRequestNote: "هذا المنتج بسعر عند الطلب. تواصل معنا لمعرفة السعر وتأكيد الطلب.",
+    supportBtn: "التحدث مع خدمة العملاء",
+    supportBack: "↩ العودة إلى المساعد الذكي",
+    supportSent: "تم تحويلك إلى فريق خدمة العملاء ✅\nاكتب رسالتك هنا وسيصلك رد الموظف مباشرة في هذه النافذة.",
+    supportResumed: "عودةً إلى محادثة خدمة العملاء — سيظهر لك أي رد جديد فور وصوله.",
+    supportResumeChip: "💬 متابعة محادثة الدعم المفتوحة",
+    supportJoined: "👤 {name} من فريق صيدة انضم إلى المحادثة",
+    supportJoinedNoName: "👥 انضم أحد موظفي الدعم إلى المحادثة",
+    supportClosed: "🔴 أُغلقت محادثة الدعم. يمكنك دائماً طلب المساعدة مجدداً.",
+    supportLeft: "عُدت إلى المساعد الذكي — محادثة الدعم ما زالت محفوظة ويمكنك العودة إليها من الزر بالأسفل.",
+    supportLive: "أنت الآن تتحدث مع فريق خدمة العملاء",
+    supportOffline: "تعذر الاتصال بخدمة العملاء الآن. حاول بعد قليل.",
+    supportEnd: "إنهاء المحادثة مع خدمة العملاء",
   };
   const EN = {
     title: "Syda Assistant",
@@ -35,7 +48,7 @@
     online: "Online",
     placeholder: "Ask me about any product…",
     send: "Send",
-    welcome: "Welcome to Syda! 🌟\nI'm your smart assistant — ask me about any product you need, in any language, and I'll point you to it right away.",
+    welcome: "Welcome to Syda! 🌟\nI'm your smart assistant — ask me about any product you need, in any language, and I'll point you to it right away.\n\n🧑‍💼 To talk to a human, tap the “Talk to customer service” button below.",
     suggestions: ["Offers & deals", "Car accessories", "Kitchen tools", "Skin & hair care"],
     viewDetails: "View details",
     addToCart: "Add to cart",
@@ -49,6 +62,18 @@
     brandAlt: "Syda",
     priceOnRequest: "Price on request",
     onRequestNote: "This product is priced on request. Contact us to confirm the price.",
+    supportBtn: "Talk to customer service",
+    supportBack: "↩ Back to the smart assistant",
+    supportSent: "You are now connected to our customer service team ✅\nWrite your message here and the agent's reply will arrive in this window.",
+    supportResumed: "Back to your customer service conversation — any new reply will appear here as soon as it arrives.",
+    supportResumeChip: "💬 Resume your open support conversation",
+    supportJoined: "👤 {name} from the Syda team joined the conversation",
+    supportJoinedNoName: "👥 A support agent joined the conversation",
+    supportClosed: "🔴 The support conversation was closed. You can always ask for help again.",
+    supportLeft: "You are back with the smart assistant — your support conversation is saved and you can return to it anytime from the button below.",
+    supportLive: "You are now chatting with customer service",
+    supportOffline: "Could not reach customer service right now. Please try again shortly.",
+    supportEnd: "End the customer service conversation",
   };
   const t = () => (localStorage.getItem("sayda-lang") === "en" ? EN : AR);
   const isEn = () => localStorage.getItem("sayda-lang") === "en";
@@ -105,6 +130,18 @@ html[dir=ltr] .msg.user{border-bottom-left-radius:14px;border-bottom-right-radiu
 .chip{border:1px solid #d4a72c;background:#fff;color:#06452f;border-radius:16px;padding:6px 12px;font:inherit;font-size:12px;cursor:pointer}
 .chip:hover{background:#d4a72c}
 .chat-note{font-size:10px;color:#8aa094;text-align:center;padding:0 10px 7px;background:#fffaf0}
+.support-btn{display:block;width:calc(100% - 28px);margin:8px 14px 0;background:#087a4b;color:#fff;border:0;border-radius:12px;padding:10px 14px;font:inherit;font-size:13px;font-weight:bold;cursor:pointer;text-align:center}
+.support-btn:hover{background:#06452f}
+.support-back{display:none;width:calc(100% - 28px);margin:8px 14px 0;background:#fff;color:#06452f;border:1.5px solid #d4a72c;border-radius:12px;padding:9px 14px;font:inherit;font-size:12.5px;font-weight:bold;cursor:pointer;text-align:center}
+.support-back:hover{background:#fffaf0}
+.chip.resume{background:#fffaf0;border-color:#087a4b;color:#087a4b;font-weight:bold}
+.syda-chat-box.support-live .chips{display:none}
+.syda-chat-box.support-live .support-btn{display:none}
+.syda-chat-box.support-live .support-back{display:block}
+.support-end{display:none;margin:0 14px 6px;background:transparent;color:#a2650c;border:1.5px dashed #d4a72c;border-radius:12px;padding:7px 12px;font:inherit;font-size:11.5px;font-weight:bold;cursor:pointer;text-align:center}
+.support-end:hover{background:#fffaf0}
+.syda-chat-box.support-live .support-end{display:block}
+.syda-chat-fab .sbadge{position:absolute;top:-3px;right:-3px;min-width:18px;height:18px;border-radius:9px;background:#d4a72c;color:#17251e;font-size:11px;font-weight:bold;display:none;align-items:center;justify-content:center;padding:0 4px;border:2px solid #fff;z-index:2}
 .syda-chat-in{display:flex;gap:8px;padding:10px;border-top:1px solid #ebdfbd;background:#fff}
 .syda-chat-in input{flex:1;border:1.5px solid #dfcf9c;border-radius:22px;padding:10px 14px;font:inherit;font-size:13px;outline:none;background:#fffaf0}
 .syda-chat-in input:focus{border-color:#087a4b}
@@ -121,6 +158,14 @@ html[dir=ltr] .msg.user{border-bottom-left-radius:14px;border-bottom-right-radiu
   let history = [];          // [{role, content}] — sent to the worker for context
   let busy = false;
   let welcomed = false;
+  let sup = null;            // human-support session: {k, sid, seq, active, staff}
+  let supTimer = null;
+  const SUP_POLL_MS = 5000;
+
+  const supSaved = () => {
+    try { const v = JSON.parse(localStorage.getItem("sayda-support") || "null"); return v && v.k ? v : null; } catch (e) { return null; }
+  };
+  const supSave = () => { try { sup && sup.k ? localStorage.setItem("sayda-support", JSON.stringify({ k: sup.k, seq: sup.seq })) : localStorage.removeItem("sayda-support"); } catch (e) { } };
 
   // ---------- dom ----------
   const styleEl = document.createElement("style");
@@ -130,7 +175,7 @@ html[dir=ltr] .msg.user{border-bottom-left-radius:14px;border-bottom-right-radiu
   const fab = document.createElement("button");
   fab.className = "syda-chat-fab";
   fab.setAttribute("aria-label", "chat");
-  fab.innerHTML = `<span class="flogo"><img src="/assets/logo.png" alt=""></span><span class="dot"></span>`;
+  fab.innerHTML = `<span class="flogo"><img src="/assets/logo.png" alt=""></span><span class="dot"></span><span class="sbadge">1</span>`;
   document.body.appendChild(fab);
 
   const box = document.createElement("div");
@@ -153,6 +198,9 @@ html[dir=ltr] .msg.user{border-bottom-left-radius:14px;border-bottom-right-radiu
       </div>
       <div class="syda-chat-msgs"></div>
       <div class="chips"></div>
+      <button class="support-btn" type="button">${L.supportBtn}</button>
+      <button class="support-back" type="button">${L.supportBack}</button>
+      <button class="support-end" type="button">${L.supportEnd}</button>
       <div class="chat-note">${L.poweredBy}</div>
       <div class="syda-chat-in">
         <input type="text" maxlength="500" placeholder="${L.placeholder}" aria-label="${L.placeholder}">
@@ -160,6 +208,9 @@ html[dir=ltr] .msg.user{border-bottom-left-radius:14px;border-bottom-right-radiu
       </div>`;
     box.querySelector(".syda-chat-x").onclick = close;
     box.querySelector(".syda-chat-in button").onclick = send;
+    box.querySelector(".support-btn").onclick = startSupport;
+    box.querySelector(".support-back").onclick = () => exitLive(false);
+    box.querySelector(".support-end").onclick = endSupport;
     const input = box.querySelector(".syda-chat-in input");
     input.onkeydown = (e) => { if (e.key === "Enter") { e.preventDefault(); send(); } };
     renderChips();
@@ -174,6 +225,14 @@ html[dir=ltr] .msg.user{border-bottom-left-radius:14px;border-bottom-right-radiu
     const wrap = box.querySelector(".chips");
     if (!wrap) return;
     wrap.innerHTML = "";
+    const saved = supSaved();
+    if (saved && !(sup && sup.active)) {
+      const r = document.createElement("button");
+      r.className = "chip resume";
+      r.textContent = L.supportResumeChip;
+      r.onclick = () => { if (!busy) startSupport(); };
+      wrap.appendChild(r);
+    }
     L.suggestions.forEach((s) => {
       const b = document.createElement("button");
       b.className = "chip";
@@ -253,6 +312,131 @@ html[dir=ltr] .msg.user{border-bottom-left-radius:14px;border-bottom-right-radiu
     return d;
   }
 
+  // ---------- human support (Telegram relay) ----------
+  function fabBadge(on) {
+    const b = fab.querySelector(".sbadge");
+    if (b) b.style.display = on ? "flex" : "none";
+  }
+
+  function updateSupportHeader() {
+    const sub = box.querySelector(".sub");
+    if (sub && sup && sup.active) sub.textContent = t().supportLive + (sup.staff ? " — " + sup.staff : "");
+  }
+
+  function enterLive(resumed) {
+    if (!sup) return;
+    sup.active = true;
+    box.classList.add("support-live");
+    addMsg("bot", resumed ? t().supportResumed : t().supportSent);
+    updateSupportHeader();
+    supSave();
+    if (supTimer) clearInterval(supTimer);
+    supTimer = setInterval(pollSupport, SUP_POLL_MS);
+    pollSupport();
+  }
+
+  function exitLive(closed) {
+    if (supTimer) { clearInterval(supTimer); supTimer = null; }
+    if (sup) sup.active = false;
+    box.classList.remove("support-live");
+    if (closed) {
+      addMsg("bot", t().supportClosed);
+      sup = null;
+      supSave();
+    } else {
+      addMsg("bot", t().supportLeft);
+      supSave();
+    }
+    renderChips();
+    updateLabels();
+  }
+
+  async function startSupport() {
+    if (busy || (sup && sup.active)) return;
+    busy = true;
+    try {
+      const saved = supSaved();
+      const k = (saved && saved.k) || (crypto.randomUUID ? crypto.randomUUID() : "k" + Date.now().toString(16) + "-" + Math.random().toString(16).slice(2, 10) + "-4" + Math.random().toString(16).slice(2, 10) + "-a" + Math.random().toString(16).slice(2, 10) + "-" + Math.random().toString(16).slice(2, 14));
+      const res = await fetch(SUPPORT_URL + "/start", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ k, lang: isEn() ? "en" : "ar", page: String(location.href).slice(0, 300) }),
+      });
+      const d = await res.json().catch(() => ({}));
+      if (res.ok && d.ok) {
+        sup = { k, sid: d.sid, seq: d.resumed && saved && saved.k === k ? (saved.seq || 0) : (d.seq || 0), active: false, staff: d.assigneeName || null };
+        enterLive(!!d.resumed);
+      } else {
+        addMsg("bot", t().supportOffline);
+      }
+    } catch (e) {
+      addMsg("bot", t().supportOffline);
+    } finally {
+      busy = false;
+    }
+  }
+
+  async function endSupport() {
+    if (busy || !sup || !sup.active) return;
+    busy = true;
+    try {
+      await fetch(SUPPORT_URL + "/end", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ k: sup.k }),
+      });
+    } catch (e) { /* closed locally regardless */ }
+    exitLive(true);
+    busy = false;
+  }
+
+  async function sendSupport(text) {
+    busy = true;
+    const btn = box.querySelector(".syda-chat-in button");
+    btn.disabled = true;
+    try {
+      const res = await fetch(SUPPORT_URL + "/msg", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ k: sup.k, text }),
+      });
+      if (res.status === 410) { exitLive(true); return; }
+      const d = await res.json().catch(() => ({}));
+      if (!res.ok || d.ok !== true) addMsg("bot", t().supportOffline);
+    } catch (e) {
+      addMsg("bot", t().supportOffline);
+    } finally {
+      busy = false;
+      btn.disabled = false;
+      const i = box.querySelector(".syda-chat-in input");
+      if (i) i.focus();
+    }
+  }
+
+  async function pollSupport() {
+    if (!sup || !sup.active) return;
+    try {
+      const res = await fetch(SUPPORT_URL + "/poll?k=" + encodeURIComponent(sup.k) + "&after=" + (sup.seq || 0));
+      const d = await res.json().catch(() => null);
+      if (!d || d.ok !== true) return;
+      if (d.status === "none") { exitLive(true); return; }
+      let fresh = false;
+      (d.msgs || []).forEach((m) => {
+        if (!m || (m.seq || 0) <= (sup.seq || 0)) return;
+        sup.seq = m.seq;
+        if (m.from === "staff") { addMsg("bot", (m.name ? "👤 " + m.name + "\n" : "") + m.text); fresh = true; }
+        else if (m.from === "sys") {
+          if (m.code === "joined") addMsg("bot", m.name ? t().supportJoined.replace("{name}", m.name) : t().supportJoinedNoName);
+          else if (m.code === "closed") { sup.seq = m.seq; exitLive(true); }
+        }
+      });
+      if (d.assigneeName && d.assigneeName !== sup.staff) { sup.staff = d.assigneeName; updateSupportHeader(); }
+      supSave();
+      if (fresh && !box.classList.contains("open")) fabBadge(true);
+      if (d.status === "closed" && sup && sup.active) exitLive(true);
+    } catch (e) { /* transient — next tick retries */ }
+  }
+
   // ---------- cart integration (works with both app.js pages and product pages) ----------
   function addToCart(item) {
     try {
@@ -293,6 +477,7 @@ html[dir=ltr] .msg.user{border-bottom-left-radius:14px;border-bottom-right-radiu
     if (!text) return;
     input.value = "";
     addMsg("user", text);
+    if (sup && sup.active) { sendSupport(text); return; } // live human-support mode
     history.push({ role: "user", content: text });
     if (history.length > MAX_HISTORY) history = history.slice(-MAX_HISTORY);
 
@@ -333,15 +518,20 @@ html[dir=ltr] .msg.user{border-bottom-left-radius:14px;border-bottom-right-radiu
   function updateLabels() {
     const L = t();
     const ttl = box.querySelector(".ttl"); if (ttl) ttl.textContent = L.title;
-    const sub = box.querySelector(".sub"); if (sub) sub.textContent = L.subtitle;
+    const sub = box.querySelector(".sub"); if (sub) sub.textContent = (sup && sup.active) ? (L.supportLive + (sup.staff ? " — " + sup.staff : "")) : L.subtitle;
     const ph = box.querySelector(".syda-chat-in input"); if (ph) ph.placeholder = L.placeholder;
     const btn = box.querySelector(".syda-chat-in button"); if (btn) btn.textContent = L.send;
+    const sb = box.querySelector(".support-btn"); if (sb) sb.textContent = L.supportBtn;
+    const kb = box.querySelector(".support-back"); if (kb) kb.textContent = L.supportBack;
+    const eb = box.querySelector(".support-end"); if (eb) eb.textContent = L.supportEnd;
     renderChips();
   }
 
   function open() {
     box.classList.add("open");
     fab.style.display = "none";
+    fabBadge(false);
+    renderChips();
     const i = box.querySelector(".syda-chat-in input");
     if (i) i.focus();
   }

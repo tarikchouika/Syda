@@ -412,3 +412,35 @@ body:has(.mobile-buybar){padding-bottom:80px}
   .header-search input{padding:10px 40px 10px 42px;font-size:14px}
   .header-actions .cart-button{padding:0 10px}
 }
+
+/* ===================== OFFER PRICING (Jumia-style CTA) ===================== */
+.bulk-hint{background:linear-gradient(135deg,rgba(212,160,44,.16),rgba(212,160,44,.05));border:1px dashed var(--gold);color:#7d6113;border-radius:12px;padding:9px 13px;font-size:13.5px;font-weight:800;line-height:1.6}
+.stock-line{display:flex}
+.stock-chip{display:inline-flex;align-items:center;gap:6px;background:rgba(8,122,75,.09);border:1px solid rgba(8,122,75,.28);color:var(--g);border-radius:999px;padding:5px 14px;font-size:12.5px;font-weight:800}
+.cta-note{font-size:13px;font-weight:700;color:var(--muted);text-align:center;line-height:1.7}
+.total-note{font-size:12.5px;font-weight:700;color:var(--faint)}
+body.dark .bulk-hint{background:rgba(212,160,44,.09);color:var(--gold);border-color:var(--gold)}
+body.dark .stock-chip{background:rgba(8,122,75,.2)}
+body.dark .cta-note,body.dark .total-note{color:var(--faint)}
+
+/* ===================== JUMIA-STYLE CTA UPGRADE ===================== */
+.stock-line{gap:8px;flex-wrap:wrap}
+.urgency{display:inline-flex;align-items:center;gap:6px;background:linear-gradient(135deg,rgba(211,47,47,.10),rgba(211,47,47,.04));border:1px solid rgba(211,47,47,.35);color:#b3261e;border-radius:999px;padding:5px 14px;font-size:12.5px;font-weight:800}
+.cta-row{display:flex;gap:10px;flex-direction:column}
+.btn.buy{background:linear-gradient(135deg,#0aa565,var(--g));color:#fff;box-shadow:0 6px 18px rgba(8,122,75,.4);animation:buyPulse 2.4s ease-in-out infinite}
+.btn.buy:hover{filter:brightness(1.07);box-shadow:0 8px 24px rgba(8,122,75,.5)}
+.btn.outline{background:#fff;color:var(--g);border:2px solid var(--g);box-shadow:none}
+.btn.outline:hover{background:rgba(8,122,75,.07);transform:translateY(-1px)}
+.tier-chip.best{border-color:var(--gold);background:linear-gradient(180deg,#fffaf0,#fff3d6)}
+.best-badge{display:inline-block;background:linear-gradient(135deg,var(--gold),#f0c75e);color:#3d2f04;border-radius:999px;padding:1px 9px;font-size:10.5px;font-weight:800;font-style:normal;line-height:1.7}
+.toast{position:fixed;left:50%;bottom:88px;transform:translateX(-50%) translateY(16px);background:#123527;color:#fff;padding:12px 24px;border-radius:999px;font-weight:800;font-size:14px;opacity:0;pointer-events:none;transition:opacity .25s,transform .25s;z-index:999;box-shadow:0 10px 30px rgba(0,0,0,.35);white-space:nowrap}
+.toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+@keyframes buyPulse{0%,100%{box-shadow:0 6px 18px rgba(8,122,75,.4)}50%{box-shadow:0 6px 26px rgba(8,122,75,.6)}}
+body.dark .btn.outline{background:#16291e;color:#4ade80}
+body.dark .urgency{background:rgba(211,47,47,.14);color:#ff8a80}
+body.dark .tier-chip.best{background:linear-gradient(180deg,#243019,#2c2a12)}
+
+/* ===================== OFFER NOTE (preserved bundle info) ===================== */
+.offer-note{display:inline-flex;align-items:center;gap:7px;background:linear-gradient(135deg,rgba(212,167,44,.16),rgba(212,167,44,.06));border:1.5px solid rgba(212,167,44,.55);color:#7a5a0a;border-radius:999px;padding:6px 15px;font-size:13.5px;font-weight:800;align-self:flex-start}
+.offer-note:hover{filter:brightness(.97)}
+body.dark .offer-note{background:rgba(212,167,44,.14);color:#f0d78e}
