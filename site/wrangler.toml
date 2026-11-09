@@ -6,3 +6,8 @@ compatibility_date = "2026-09-20"
 binding = "SUPPORT_KV"
 id = "d3449bcd40334d6892cab214fd03f6cf"
 
+
+[[d1_databases]]
+binding = "SUPPORT_DB"
+database_name = "syda_support"
+database_id = "eb48dfd4-c9f2-4942-915c-4c625e9813ef"

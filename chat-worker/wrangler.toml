@@ -1,7 +1,7 @@
 name = "syda-chat"
 main = "src/index.js"
 compatibility_date = "2026-09-20"
-account_id = "02fcf95818efed008f495dd6e02c3ef6"
+account_id = "03efbdbe7f8da54f935d03a024470f4a"
 
 [ai]
 binding = "AI"

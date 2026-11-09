@@ -7,14 +7,14 @@
  *   POST /api/support/end   { k }               → visitor closes the conversation
  *
  * The visitor never needs a Telegram account: this relay stores the conversation
- * in KV and mirrors it both ways (visitor ⇄ Telegram staff).
- * Contract kept identical to the previous /support endpoint on the chat worker.
+ * in D1 (strongly consistent — sync delay fix) and mirrors it both ways
+ * (visitor ⇄ Telegram staff). API contract unchanged from the previous version.
  */
 
 import {
   json, validK, rateLimited,
-  getSession, putSession, newSid, addToOpen, removeFromOpen,
-  loadMsgs, saveMsgs, pushMsg,
+  getSession, putSession, newSid,
+  pushMsg, loadMsgs,
   notifyNewConversation, notifyVisitorMessage, tgSend, allStaffIds,
 } from "../support-lib.js";
 
@@ -39,16 +39,17 @@ async function readJson(request) {
 
 // ---------- POST /start ----------
 async function start(env, waitUntil, body) {
+  const db = env.SUPPORT_DB;
   const k = body && body.k;
   const lang = body && body.lang === "en" ? "en" : "ar";
   const page = String((body && body.page) || "").slice(0, 300);
   if (!validK(k)) return json(400, { ok: false, error: "bad_key" });
 
-  const existing = await getSession(env.SUPPORT_KV, k);
+  const existing = await getSession(db, k);
   if (existing && existing.status === "open") {
-    // resume: keep the same conversation and notify nobody (staff already pinged)
+    // resume: keep the same conversation (staff already pinged when it opened)
     existing.updatedAt = Date.now();
-    await putSession(env.SUPPORT_KV, existing);
+    await putSession(db, existing);
     return json(200, {
       ok: true, sid: existing.sid, seq: existing.seq || 0,
       resumed: true, assigneeName: existing.assigneeName || null,
@@ -57,46 +58,42 @@ async function start(env, waitUntil, body) {
 
   // fresh conversation (new, or previous one closed → reset the thread)
   const sess = {
-    k, sid: await newSid(env.SUPPORT_KV), lang, page,
+    k, sid: await newSid(db), lang, page,
     seq: 0, status: "open", assignee: null, assigneeName: null,
     createdAt: Date.now(), updatedAt: Date.now(),
   };
-  await putSession(env.SUPPORT_KV, sess);
-  await saveMsgs(env.SUPPORT_KV, k, { list: [] });
-  await addToOpen(env.SUPPORT_KV, k);
-  waitUntil(notifyNewConversation(env, env.SUPPORT_KV, sess, null));
+  await putSession(db, sess);
+  waitUntil(notifyNewConversation(env, db, sess, null));
   return json(200, { ok: true, sid: sess.sid, seq: 0, resumed: false, assigneeName: null });
 }
 
 // ---------- POST /msg ----------
 async function msg(env, waitUntil, body) {
+  const db = env.SUPPORT_DB;
   const k = body && body.k;
   const text = String((body && body.text) || "").trim();
   if (!validK(k)) return json(400, { ok: false, error: "bad_key" });
   if (!text) return json(400, { ok: false, error: "empty_message" });
 
-  const sess = await getSession(env.SUPPORT_KV, k);
+  const sess = await getSession(db, k);
   if (!sess || sess.status !== "open") return json(410, { ok: false, error: "closed" });
   if (rateLimited("msg:" + k, MSG_RATE, RATE_WINDOW)) {
     return json(429, { ok: false, error: "rate_limited" });
   }
 
-  await pushMsg(env.SUPPORT_KV, k, "visitor", text);
-  waitUntil(notifyVisitorMessage(env, env.SUPPORT_KV, sess, text));
+  await pushMsg(db, k, "visitor", text);
+  waitUntil(notifyVisitorMessage(env, db, sess, text));
   return json(200, { ok: true });
 }
 
 // ---------- GET /poll ----------
 async function poll(env, k, after) {
-  const sess = await getSession(env.SUPPORT_KV, k);
+  const db = env.SUPPORT_DB;
+  const sess = await getSession(db, k);
   if (!sess) return json(200, { ok: true, status: "none", msgs: [], assigneeName: null });
 
-  const afterSeq = Math.max(0, Number(after) || 0);
-  const msgs = await loadMsgs(env.SUPPORT_KV, k);
-  const pending = msgs.list
-    .filter((m) => m.seq > afterSeq && m.from !== "visitor")
-    .slice(0, 50)
-    .map((m) => ({ seq: m.seq, from: m.from, text: m.text, name: m.name || null, code: m.code || null }));
+  const pending = await loadMsgs(db, k, after, 50)
+    .then((list) => list.filter((m) => m.from !== "visitor"));
 
   return json(200, {
     ok: true,
@@ -108,21 +105,21 @@ async function poll(env, k, after) {
 
 // ---------- POST /end ----------
 async function end(env, waitUntil, body) {
+  const db = env.SUPPORT_DB;
   const k = body && body.k;
   if (!validK(k)) return json(400, { ok: false, error: "bad_key" });
-  const sess = await getSession(env.SUPPORT_KV, k);
+  const sess = await getSession(db, k);
   if (!sess || sess.status !== "open") return json(200, { ok: true, status: "closed" });
 
   sess.status = "closed";
   sess.updatedAt = Date.now();
-  await putSession(env.SUPPORT_KV, sess);
-  await pushMsg(env.SUPPORT_KV, k, "sys", "", { code: "closed" });
-  await removeFromOpen(env.SUPPORT_KV, k);
+  await putSession(db, sess);
+  await pushMsg(db, k, "sys", "", { code: "closed" });
 
   const notify = sess.assignee
-    ? tgSend(env, sess.assignee, `✅ ${sess.sid ? "#" + sess.sid : ""} أغلق الزائر المحادثة.`)
+    ? tgSend(env, sess.assignee, `✅ #${sess.sid} أغلق الزائر المحادثة.`)
     : (async () => {
-        const staff = await allStaffIds(env.SUPPORT_KV);
+        const staff = await allStaffIds(db);
         const ids = [...new Set([...staff.superadmins, ...staff.admins])];
         await Promise.all(ids.map((id) => tgSend(env, id, `✅ #${sess.sid} أغلق الزائر المحادثة.`)));
       })();
@@ -134,12 +131,13 @@ async function end(env, waitUntil, body) {
 
 export async function onRequestPost(context) {
   const { request, env } = context;
-  const waitUntil = (p) => context.waitUntil(p);
+  if (!env || !env.SUPPORT_DB) return json(503, { ok: false, error: "db_unavailable" });
   if (!originAllowed(request)) return json(403, { ok: false, error: "origin_not_allowed" });
 
   const url = new URL(request.url);
   const route = url.pathname.replace(/^\/api\/support\/?/, "").replace(/\/$/, "");
   const body = await readJson(request);
+  const waitUntil = (p) => context.waitUntil(p);
 
   if (route === "start") {
     const ip = request.headers.get("CF-Connecting-IP") || "unknown";
@@ -155,6 +153,7 @@ export async function onRequestPost(context) {
 
 export async function onRequestGet(context) {
   const { request, env } = context;
+  if (!env || !env.SUPPORT_DB) return json(503, { ok: false, error: "db_unavailable" });
   if (!originAllowed(request)) return json(403, { ok: false, error: "origin_not_allowed" });
   const url = new URL(request.url);
   const route = url.pathname.replace(/^\/api\/support\/?/, "").replace(/\/$/, "");

@@ -1,15 +1,18 @@
 /**
  * Syda store — shared support-relay backend (Pages Functions helper).
- * Imported by functions/api/support.js (visitor endpoints) and
- * functions/api/telegram.js (Telegram webhook + staff commands).
+ * Imported by functions/api/support/[route].js and functions/api/telegram.js.
  *
- * Data model (KV namespace binding SUPPORT_KV):
- *   sess:<k>   → { k, sid, lang, page, seq, status: open|closed,
- *                  assignee: <tgChatId>|null, assigneeName, createdAt, updatedAt }
- *   msgs:<k>   → { list: [ { seq, from: visitor|staff|sys, text, name, code, ts } ] }  (cap 200)
- *   staff:<id> → { cur: <k>|null, name, lastSeen }   (per-staff current chat binding)
- *   idx:open   → { open: [k] }                        (open session keys)
- *   cfg:roles  → { superadmins:[id], admins:[id], coadmins:[id] }
+ * Storage: D1 (syda_support) — STRONG read-after-write consistency. This is the
+ * fix for the >20s message-sync delay: the previous KV-only storage relies on
+ * eventually-consistent cross-POP replication (up to 60s), so a reply written
+ * by the Telegram webhook (one POP) stayed invisible to the visitor's poll
+ * (another POP) for tens of seconds. D1 reads see committed writes immediately.
+ *
+ * Tables:
+ *   sessions(k PK, sid, lang, page, seq, status, assignee, assignee_name, created_at, updated_at)
+ *   messages(k, seq PK-composite, from_side, text, name, code, ts)
+ *   staff(tg_id PK, cur_k, name, last_seen)
+ *   roles(tg_id PK, role)
  *
  * Roles:
  *   superadmin (seed 5700612979) — all permissions + delegate roles (admin/coadmin)
@@ -19,12 +22,9 @@
  */
 
 const SUPERADMIN_SEED = "5700612979";
-const MSG_CAP = 200;
+const MSG_CAP = 200;          // messages kept per session (trimmed on insert)
 const MSG_MAX_LEN = 1000;
-const SESSION_TTL = 7 * 24 * 60 * 60; // seconds — refreshed on activity
-const POLL_CAP = 50;
-const SID_ALPHABET = "ABCDEFGHJKMNPQRSTUVWXYZ23456789";
-const SID_LEN = 5;
+const SESSION_IDLE_DAYS = 7;  // sessions considered expired after 7 idle days
 const ROLE_AR = { superadmin: "سوبر أدمين", admin: "أدمن", coadmin: "كوأدمين", none: "بدون صلاحية" };
 
 // ---------- small helpers ----------
@@ -32,7 +32,10 @@ const ROLE_AR = { superadmin: "سوبر أدمين", admin: "أدمن", coadmin:
 function json(status, body) {
   return new Response(JSON.stringify(body), {
     status,
-    headers: { "Content-Type": "application/json; charset=utf-8" },
+    headers: {
+      "Content-Type": "application/json; charset=utf-8",
+      "Cache-Control": "no-store", // polls must never be cached (fixes stale replies)
+    },
   });
 }
 
@@ -47,7 +50,7 @@ function validK(k) {
   return typeof k === "string" && /^[a-f0-9][a-f0-9-]{7,63}$/i.test(k);
 }
 
-// in-memory rate limiter (per isolate), same approach as the chat worker
+// in-memory rate limiter (per isolate) — same approach as the chat worker
 const rateBuckets = new Map();
 function rateLimited(id, limit, windowSec) {
   const now = Date.now() / 1000;
@@ -63,106 +66,117 @@ function rateLimited(id, limit, windowSec) {
   return false;
 }
 
-// ---------- KV helpers ----------
+// ---------- D1 helpers ----------
 
-async function kvGet(KV, key) {
-  if (!KV) return null;
-  try {
-    return (await KV.get(key, "json")) ?? null;
-  } catch (e) {
-    return null;
-  }
+async function dbAll(db, sql, params) {
+  const res = await db.prepare(sql).bind(...(params || [])).all();
+  return res.results || [];
 }
 
-async function kvPut(KV, key, value, ttl) {
-  if (!KV) return;
-  const opts = ttl && ttl > 60 ? { expirationTtl: ttl } : undefined;
-  await KV.put(key, JSON.stringify(value), opts);
+async function dbRun(db, sql, params) {
+  return await db.prepare(sql).bind(...(params || [])).run();
+}
+
+function db1(rows) {
+  return rows && rows.length ? rows[0] : null;
 }
 
 // ---------- roles ----------
 
-async function getRoles(KV) {
-  const cfg = (await kvGet(KV, "cfg:roles")) || {};
-  return {
-    superadmins: new Set(cfg.superadmins != null ? cfg.superadmins : [SUPERADMIN_SEED]),
-    admins: new Set(cfg.admins || []),
-    coadmins: new Set(cfg.coadmins || []),
-  };
-}
-
-async function putRoles(KV, roles) {
-  await kvPut(KV, "cfg:roles", {
-    superadmins: [...roles.superadmins],
-    admins: [...roles.admins],
-    coadmins: [...roles.coadmins],
-  });
-}
-
-async function roleOf(KV, tgId) {
+async function roleOf(db, tgId) {
   const id = String(tgId);
-  const roles = await getRoles(KV);
-  if (roles.superadmins.has(id)) return "superadmin";
-  if (roles.admins.has(id)) return "admin";
-  if (roles.coadmins.has(id)) return "coadmin";
-  return "none";
+  if (id === SUPERADMIN_SEED) return "superadmin"; // seed superadmin is permanent
+  const rows = await dbAll(db, "SELECT role FROM roles WHERE tg_id = ?", [id]);
+  const r = db1(rows);
+  return r ? r.role : "none";
+}
+
+async function setRole(db, tgId, role) {
+  await dbRun(
+    db,
+    "INSERT INTO roles (tg_id, role) VALUES (?, ?) ON CONFLICT(tg_id) DO UPDATE SET role = excluded.role",
+    [String(tgId), role]
+  );
+}
+
+async function allStaffIds(db) {
+  const rows = await dbAll(db, "SELECT tg_id, role FROM roles");
+  const out = { superadmins: [SUPERADMIN_SEED], admins: [], coadmins: [] };
+  for (const r of rows) {
+    if (r.role === "admin") out.admins.push(r.tg_id);
+    if (r.role === "coadmin") out.coadmins.push(r.tg_id);
+    if (r.role === "superadmin" && r.tg_id !== SUPERADMIN_SEED) out.superadmins.push(r.tg_id);
+  }
+  return out;
 }
 
 // ---------- sessions ----------
 
-async function getSession(KV, k) {
+function rowToSession(s) {
+  return s ? {
+    k: s.k, sid: s.sid, lang: s.lang, page: s.page, seq: s.seq,
+    status: s.status, assignee: s.assignee, assigneeName: s.assignee_name,
+    createdAt: s.created_at, updatedAt: s.updated_at,
+  } : null;
+}
+
+async function getSession(db, k) {
   if (!validK(k)) return null;
-  return await kvGet(KV, "sess:" + k);
+  const rows = await dbAll(db, "SELECT * FROM sessions WHERE k = ?", [k]);
+  return rowToSession(db1(rows));
 }
 
-async function putSession(KV, sess) {
-  await kvPut(KV, "sess:" + sess.k, sess, SESSION_TTL);
+async function putSession(db, sess) {
+  await dbRun(
+    db,
+    `INSERT INTO sessions (k, sid, lang, page, seq, status, assignee, assignee_name, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+     ON CONFLICT(k) DO UPDATE SET sid=excluded.sid, lang=excluded.lang, page=excluded.page,
+       seq=excluded.seq, status=excluded.status, assignee=excluded.assignee,
+       assignee_name=excluded.assignee_name, updated_at=excluded.updated_at`,
+    [sess.k, sess.sid, sess.lang || "ar", sess.page || "", sess.seq || 0,
+     sess.status || "open", sess.assignee || null, sess.assigneeName || null,
+     sess.createdAt || Date.now(), sess.updatedAt || Date.now()]
+  );
 }
 
-async function newSid(KV) {
-  const keys = await getOpenKeys(KV);
-  const open = await Promise.all(keys.slice(-100).map((k) => kvGet(KV, "sess:" + k)));
-  const taken = new Set(open.filter(Boolean).map((s) => s.sid));
-  for (let i = 0; i < 8; i++) {
+async function newSid(db) {
+  const ALPHABET = "ABCDEFGHJKMNPQRSTUVWXYZ23456789";
+  for (let attempt = 0; attempt < 8; attempt++) {
     let sid = "";
-    const bytes = new Uint8Array(SID_LEN);
+    const bytes = new Uint8Array(5);
     crypto.getRandomValues(bytes);
-    for (let b of bytes) sid += SID_ALPHABET[b % SID_ALPHABET.length];
-    if (!taken.has(sid)) return sid;
+    for (const b of bytes) sid += ALPHABET[b % ALPHABET.length];
+    const rows = await dbAll(db, "SELECT k FROM sessions WHERE sid = ? AND status = 'open'", [sid]);
+    if (!rows.length) return sid;
   }
   return Date.now().toString(36).toUpperCase();
 }
 
-async function getOpenKeys(KV) {
-  const idx = await kvGet(KV, "idx:open");
-  return (idx && Array.isArray(idx.open)) ? idx.open : [];
+async function getOpenSessions(db) {
+  const cutoff = Date.now() - SESSION_IDLE_DAYS * 86400 * 1000;
+  const rows = await dbAll(
+    db,
+    "SELECT * FROM sessions WHERE status = 'open' AND updated_at > ? ORDER BY updated_at DESC LIMIT 200",
+    [cutoff]
+  );
+  return rows.map(rowToSession);
 }
 
-async function addToOpen(KV, k) {
-  const keys = await getOpenKeys(KV);
-  if (!keys.includes(k)) await kvPut(KV, "idx:open", { open: [...keys, k].slice(-500) });
-}
-
-async function removeFromOpen(KV, k) {
-  const keys = await getOpenKeys(KV);
-  if (keys.includes(k)) await kvPut(KV, "idx:open", { open: keys.filter((x) => x !== k) });
+async function findSessionBySid(db, sid) {
+  const rows = await dbAll(
+    db,
+    "SELECT * FROM sessions WHERE sid = ? AND status = 'open' ORDER BY updated_at DESC LIMIT 1",
+    [String(sid).toUpperCase()]
+  );
+  return rowToSession(db1(rows));
 }
 
 // ---------- messages ----------
 
-async function loadMsgs(KV, k) {
-  const m = await kvGet(KV, "msgs:" + k);
-  return m && Array.isArray(m.list) ? m : { list: [] };
-}
-
-async function saveMsgs(KV, k, msgs) {
-  if (msgs.list.length > MSG_CAP) msgs.list = msgs.list.slice(-MSG_CAP);
-  await kvPut(KV, "msgs:" + k, msgs, SESSION_TTL);
-}
-
-/** Appends a message to a session and returns it (or null when session missing). */
-async function pushMsg(KV, k, from, text, extra) {
-  const sess = await getSession(KV, k);
+/** Appends a message (atomic seq bump) and returns it; null when session missing. */
+async function pushMsg(db, k, from, text, extra) {
+  const sess = await getSession(db, k);
   if (!sess) return null;
   const seq = (sess.seq || 0) + 1;
   const msg = {
@@ -173,37 +187,63 @@ async function pushMsg(KV, k, from, text, extra) {
     code: extra && extra.code ? String(extra.code).slice(0, 20) : null,
     ts: Date.now(),
   };
-  sess.seq = seq;
-  sess.updatedAt = msg.ts;
-  await putSession(KV, sess);
-  const msgs = await loadMsgs(KV, k);
-  msgs.list.push(msg);
-  await saveMsgs(KV, k, msgs);
+  await dbRun(
+    db,
+    "INSERT INTO messages (k, seq, from_side, text, name, code, ts) VALUES (?, ?, ?, ?, ?, ?, ?)",
+    [k, seq, msg.from, msg.text, msg.name, msg.code, msg.ts]
+  );
+  await dbRun(db, "UPDATE sessions SET seq = ?, updated_at = ? WHERE k = ?", [seq, msg.ts, k]);
+  // trim history to the cap
+  await dbRun(
+    db,
+    `DELETE FROM messages WHERE k = ? AND seq <= (SELECT MAX(seq) - ${MSG_CAP} FROM messages WHERE k = ?)`,
+    [k, k]
+  );
   return msg;
+}
+
+async function loadMsgs(db, k, afterSeq, limit) {
+  const rows = await dbAll(
+    db,
+    "SELECT seq, from_side, text, name, code, ts FROM messages WHERE k = ? AND seq > ? ORDER BY seq ASC LIMIT ?",
+    [k, Math.max(0, Number(afterSeq) || 0), Math.min(50, Number(limit) || 50)]
+  );
+  return rows.map((r) => ({ seq: r.seq, from: r.from_side, text: r.text, name: r.name || null, code: r.code || null, ts: r.ts }));
+}
+
+async function lastVisitorMsgs(db, k, n) {
+  const rows = await dbAll(
+    db,
+    "SELECT text FROM messages WHERE k = ? AND from_side = 'visitor' ORDER BY seq DESC LIMIT ?",
+    [k, n || 5]
+  );
+  return rows.reverse();
 }
 
 // ---------- staff registry ----------
 
-async function getStaff(KV, tgId) {
-  const s = await kvGet(KV, "staff:" + tgId);
-  return s || { cur: null, name: null, lastSeen: 0 };
+async function getStaff(db, tgId) {
+  const rows = await dbAll(db, "SELECT * FROM staff WHERE tg_id = ?", [String(tgId)]);
+  const s = db1(rows);
+  return s ? { cur: s.cur_k, name: s.name, lastSeen: s.last_seen } : { cur: null, name: null, lastSeen: 0 };
 }
 
-async function putStaff(KV, tgId, staff) {
-  await kvPut(KV, "staff:" + tgId, staff, 90 * 24 * 60 * 60);
+async function putStaff(db, tgId, staff) {
+  await dbRun(
+    db,
+    `INSERT INTO staff (tg_id, cur_k, name, last_seen) VALUES (?, ?, ?, ?)
+     ON CONFLICT(tg_id) DO UPDATE SET cur_k=excluded.cur_k, name=COALESCE(excluded.name, staff.name), last_seen=excluded.last_seen`,
+    [String(tgId), staff.cur || null, staff.name || null, staff.lastSeen || Date.now()]
+  );
 }
 
 // ---------- Telegram API ----------
-
-function tgBase(env) {
-  return (env && env.TG_API_BASE) || "https://api.telegram.org";
-}
 
 async function tgCall(env, method, payload) {
   const token = env && env.TG_BOT_TOKEN;
   if (!token) return null;
   try {
-    const res = await fetch(tgBase(env) + "/bot" + token + "/" + method, {
+    const res = await fetch("https://api.telegram.org/bot" + token + "/" + method, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload),
@@ -230,36 +270,10 @@ async function tgAnswerCallback(env, callbackId, text) {
   return await tgCall(env, "answerCallbackQuery", { callback_query_id: callbackId, text: text || "" });
 }
 
-/** All staff ids grouped by role (from cfg:roles). */
-async function allStaffIds(KV) {
-  const roles = await getRoles(KV);
-  return {
-    superadmins: [...roles.superadmins],
-    admins: [...roles.admins],
-    coadmins: [...roles.coadmins],
-  };
-}
-
 // ---------- staff notifications ----------
 
 function sessLabel(sess) {
-  const lang = sess.lang === "en" ? "EN" : "ع";
   return `#${escHtml(sess.sid)}`;
-}
-
-/** Notify the whole team about a new conversation (button opens it). */
-async function notifyNewConversation(env, KV, sess, firstText) {
-  const staff = await allStaffIds(KV);
-  const ids = [...new Set([...staff.superadmins, ...staff.admins, ...staff.coadmins])];
-  const text =
-    `💬 <b>محادثة زائر جديدة</b> ${sessLabel(sess)}\n` +
-    `🌐 اللغة: ${sess.lang === "en" ? "English" : "العربية"}\n` +
-    (sess.page ? `🔗 الصفحة: ${escHtml(shortUrl(sess.page))}\n` : "") +
-    (firstText ? `👤 الرسالة: ${escHtml(firstText.slice(0, 200))}\n` : "") +
-    `\nللرد أرسل: <code>/open ${escHtml(sess.sid)}</code>`;
-  const keyboard = { inline_keyboard: [[{ text: "👁 فتح المحادثة", callback_data: "open:" + sess.sid }]] };
-  const jobs = ids.map((id) => tgSend(env, id, text, { reply_markup: keyboard }));
-  await Promise.all(jobs);
 }
 
 function shortUrl(url) {
@@ -271,8 +285,22 @@ function shortUrl(url) {
   }
 }
 
+/** Notify the whole team about a new conversation. */
+async function notifyNewConversation(env, db, sess, firstText) {
+  const staff = await allStaffIds(db);
+  const ids = [...new Set([...staff.superadmins, ...staff.admins, ...staff.coadmins])];
+  const text =
+    `💬 <b>محادثة زائر جديدة</b> ${sessLabel(sess)}\n` +
+    `🌐 اللغة: ${sess.lang === "en" ? "English" : "العربية"}\n` +
+    (sess.page ? `🔗 الصفحة: ${escHtml(shortUrl(sess.page))}\n` : "") +
+    (firstText ? `👤 الرسالة: ${escHtml(firstText.slice(0, 200))}\n` : "") +
+    `\nللرد أرسل: <code>/open ${escHtml(sess.sid)}</code>`;
+  const keyboard = { inline_keyboard: [[{ text: "👁 فتح المحادثة", callback_data: "open:" + sess.sid }]] };
+  await Promise.all(ids.map((id) => tgSend(env, id, text, { reply_markup: keyboard })));
+}
+
 /** Route a visitor message to the assignee, or fan out to all staff when unassigned. */
-async function notifyVisitorMessage(env, KV, sess, text) {
+async function notifyVisitorMessage(env, db, sess, text) {
   if (sess.assignee) {
     return await tgSend(
       env,
@@ -280,7 +308,7 @@ async function notifyVisitorMessage(env, KV, sess, text) {
       `📨 ${sessLabel(sess)} · ${escHtml(sess.assigneeName || "وكيل")}:\n${escHtml(text.slice(0, 500))}`
     );
   }
-  const staff = await allStaffIds(KV);
+  const staff = await allStaffIds(db);
   const ids = [...new Set([...staff.superadmins, ...staff.admins, ...staff.coadmins])];
   const body = `📨 <b>رسالة زائر</b> ${sessLabel(sess)} (بدون وكيل):\n${escHtml(text.slice(0, 500))}`;
   const keyboard = { inline_keyboard: [[{ text: "👁 الرد الآن", callback_data: "open:" + sess.sid }]] };
@@ -288,13 +316,13 @@ async function notifyVisitorMessage(env, KV, sess, text) {
 }
 
 export {
-  SUPERADMIN_SEED, MSG_CAP, POLL_CAP, ROLE_AR,
+  SUPERADMIN_SEED, MSG_CAP, MSG_MAX_LEN, SESSION_IDLE_DAYS, ROLE_AR,
   json, escHtml, validK, rateLimited,
-  kvGet, kvPut,
-  getRoles, putRoles, roleOf, allStaffIds,
-  getSession, putSession, newSid, getOpenKeys, addToOpen, removeFromOpen,
-  loadMsgs, saveMsgs, pushMsg,
+  dbAll, dbRun, db1,
+  roleOf, setRole, allStaffIds,
+  getSession, putSession, newSid, getOpenSessions, findSessionBySid,
+  pushMsg, loadMsgs, lastVisitorMsgs,
   getStaff, putStaff,
-  tgCall, tgSend, tgAnswerCallback, tgBase,
+  tgCall, tgSend, tgAnswerCallback,
   notifyNewConversation, notifyVisitorMessage, shortUrl, sessLabel,
 };

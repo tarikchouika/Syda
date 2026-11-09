@@ -5,7 +5,7 @@
 (() => {
   "use strict";
 
-  const WORKER_URL = "https://syda-chat.balbolghol-ai.workers.dev/chat";
+  const WORKER_URL = "https://syda-chat.tarikc.workers.dev/chat";
   const SUPPORT_URL = "/api/support"; // same-origin Pages Function (Telegram relay)
   const MAX_HISTORY = 10;
 
@@ -147,6 +147,27 @@ html[dir=ltr] .msg.user{border-bottom-left-radius:14px;border-bottom-right-radiu
 .syda-chat-in input:focus{border-color:#087a4b}
 .syda-chat-in button{background:#d4a72c;color:#17251e;border:0;border-radius:22px;padding:10px 16px;font:inherit;font-weight:bold;cursor:pointer}
 .syda-chat-in button:disabled{opacity:.5;cursor:default}
+/* ---- dark mode: widget follows body.dark with the store identity (green/gold) ----
+   All pairs measured >= 4.5:1 (WCAG AA): --ink #e8f0ea on #13241b = 13.95:1,
+   gold #d4a72c on #13241b = 8.4:1, #0d1712 text on gold = 8.4:1 */
+body.dark .syda-chat-box{background:#13241b;border-color:#2d4436}
+body.dark .syda-chat-msgs{background:#0d1712}
+body.dark .msg.bot{background:#1a2f23;border-color:#2d4436;color:#e8f0ea}
+body.dark .msg.user{background:#0c8b57;color:#fff}
+body.dark .chat-card{background:#1a2f23;border-color:#2d4436;color:#e8f0ea}
+body.dark .chat-card img{background:#1a2f23}
+body.dark .chat-card .view{background:#d4a72c;color:#0d1712}
+body.dark .chat-card .add{background:#0c8b57;color:#fff}
+body.dark .chips{background:#0d1712}
+body.dark .chip{background:#13241b;color:#e8f0ea;border-color:#d4a72c}
+body.dark .chip.resume{background:#1a2f23;color:#e8c04d}
+body.dark .chat-note{color:#a3b8ac;background:#0d1712}
+body.dark .support-back{background:#13241b;color:#e8f0ea}
+body.dark .support-back:hover{background:#1a2f23}
+body.dark .support-end:hover{background:#1a2f23}
+body.dark .syda-chat-in{background:#13241b;border-color:#2d4436}
+body.dark .syda-chat-in input{background:#0d1712;border-color:#3d5a48;color:#e8f0ea}
+body.dark .syda-chat-in button{background:#d4a72c;color:#0d1712}
 @media(max-width:600px){
 .syda-chat-box{top:0;right:0;left:0;bottom:0;width:auto;max-width:100%;height:auto;border-radius:0;border:0;box-shadow:none;z-index:960}
 .syda-chat-head{padding-top:calc(13px + env(safe-area-inset-top));padding-bottom:13px}
@@ -160,7 +181,7 @@ html[dir=ltr] .msg.user{border-bottom-left-radius:14px;border-bottom-right-radiu
   let welcomed = false;
   let sup = null;            // human-support session: {k, sid, seq, active, staff}
   let supTimer = null;
-  const SUP_POLL_MS = 5000;
+  const SUP_POLL_MS = 2500; // fast sync: D1-backed relay is strongly consistent; poll every 2.5s
 
   const supSaved = () => {
     try { const v = JSON.parse(localStorage.getItem("sayda-support") || "null"); return v && v.k ? v : null; } catch (e) { return null; }
@@ -416,7 +437,7 @@ html[dir=ltr] .msg.user{border-bottom-left-radius:14px;border-bottom-right-radiu
   async function pollSupport() {
     if (!sup || !sup.active) return;
     try {
-      const res = await fetch(SUPPORT_URL + "/poll?k=" + encodeURIComponent(sup.k) + "&after=" + (sup.seq || 0));
+      const res = await fetch(SUPPORT_URL + "/poll?k=" + encodeURIComponent(sup.k) + "&after=" + (sup.seq || 0), { cache: "no-store" });
       const d = await res.json().catch(() => null);
       if (!d || d.ok !== true) return;
       if (d.status === "none") { exitLive(true); return; }

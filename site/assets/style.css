@@ -378,6 +378,8 @@ body.dark input::placeholder,body.dark textarea::placeholder{color:var(--faint)}
 #catbarNav{background:linear-gradient(180deg,rgba(6,69,47,0),rgba(6,69,47,.06));max-width:1320px;margin:0 auto;padding:10px 20px 2px;display:flex;gap:8px;overflow-x:auto;scrollbar-width:none}
 #catbarNav::-webkit-scrollbar{display:none}
 #catbarNav a{flex:0 0 auto;background:var(--surface);border:1.5px solid var(--line);color:var(--d);text-decoration:none;font-size:13px;font-weight:700;padding:7px 15px;border-radius:999px;white-space:nowrap;transition:all .18s;box-shadow:var(--shadow-1)}
+/* dark mode: badge text flips to --ink (#06452f on #13241b measured 1.47:1 — invisible; --ink gives 13.95:1) */
+body.dark #catbarNav a{color:var(--ink);border-color:var(--line2)}
 #catbarNav a:hover,#catbarNav a.on{background:var(--grad-btn);border-color:transparent;color:#fff;transform:translateY(-1px)}
 @media (max-width:860px){#catbarNav{padding:8px 14px 4px}#catbarNav a{font-size:12px;padding:6px 12px}}
 /* footer note link + buybar padding fix */

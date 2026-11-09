@@ -3,7 +3,8 @@
  *
  * Bot: @sydasupports_bot — customer-service relay between site visitors and the team.
  * The visitor chats on the website; staff chat in Telegram. No Telegram account
- * is needed by the visitor — this webhook mirrors messages both ways via KV.
+ * is needed by the visitor — this webhook mirrors messages both ways via D1
+ * (strongly consistent storage — the sync-delay fix).
  *
  * Roles (all staff must /start the bot once; the superadmin grants permissions):
  *   superadmin — everything + /role to delegate admin/coadmin permissions
@@ -25,12 +26,12 @@
  */
 
 import {
-  SUPERADMIN_SEED, ROLE_AR, json, escHtml, validK,
-  kvGet, getRoles, putRoles, roleOf, allStaffIds,
-  getSession, putSession, getOpenKeys, removeFromOpen,
-  loadMsgs, pushMsg,
+  SUPERADMIN_SEED, ROLE_AR, json, escHtml, dbRun,
+  roleOf, setRole, allStaffIds,
+  getSession, putSession, findSessionBySid, getOpenSessions,
+  pushMsg, lastVisitorMsgs,
   getStaff, putStaff,
-  tgCall, tgSend, tgAnswerCallback,
+  tgSend, tgAnswerCallback,
 } from "./support-lib.js";
 
 const CMDS = [
@@ -72,44 +73,33 @@ function ago(ts) {
   return Math.floor(s / 86400) + " ي";
 }
 
-async function closeSession(env, sess, byName) {
+async function closeSession(db, sess) {
   sess.status = "closed";
   sess.updatedAt = Date.now();
-  await putSession(env.SUPPORT_KV, sess);
-  await pushMsg(env.SUPPORT_KV, sess.k, "sys", "", { code: "closed" });
-  await removeFromOpen(env.SUPPORT_KV, sess.k);
-}
-
-async function findSessionBySid(env, sid) {
-  const keys = await getOpenKeys(env.SUPPORT_KV);
-  const open = await Promise.all(keys.map((k) => kvGet(env.SUPPORT_KV, "sess:" + k)));
-  return open.find((s) => s && s.sid === String(sid).toUpperCase()) || null;
+  await putSession(db, sess);
+  await pushMsg(db, sess.k, "sys", "", { code: "closed" });
 }
 
 /** Recent visitor messages shown to staff when opening a conversation. */
-async function recentVisitorText(env, k, lang) {
-  const msgs = await loadMsgs(env.SUPPORT_KV, k);
-  const recent = msgs.list.filter((m) => m.from === "visitor").slice(-5);
-  if (!recent.length) return lang === "en" ? "(no messages yet)" : "(لا رسائل بعد)";
-  return recent.map((m) => "👤 " + escHtml(m.text.slice(0, 200))).join("\n");
+async function recentVisitorText(db, k, lang) {
+  const rows = await lastVisitorMsgs(db, k, 5);
+  if (!rows.length) return lang === "en" ? "(no messages yet)" : "(لا رسائل بعد)";
+  return rows.map((r) => "👤 " + escHtml(String(r.text || "").slice(0, 200))).join("\n");
 }
 
 // ---------- command handlers ----------
 
-async function cmdChats(env, from, role) {
-  const keys = await getOpenKeys(env.SUPPORT_KV);
-  if (!keys.length) return await tgSend(env, from.id, "📭 لا توجد محادثات مفتوحة حالياً.");
-  const open = (await Promise.all(keys.map((k) => kvGet(env.SUPPORT_KV, "sess:" + k))))
-    .filter((s) => s && s.status === "open");
+async function cmdChats(env, db, from, role) {
+  const open = await getOpenSessions(db);
+  if (!open.length) return await tgSend(env, from.id, "📭 لا توجد محادثات مفتوحة حالياً.");
   let list = open;
   if (role === "coadmin") {
     const me = String(from.id);
     list = open.filter((s) => !s.assignee || String(s.assignee) === me);
   }
   if (!list.length) return await tgSend(env, from.id, "📭 لا توجد محادثات متاحة لك (المسندة لك فقط ككوأدمين).");
-  list.sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
   const rows = list.slice(0, 15).map((s) => {
-    const assignee = s.assignee ? (escHtml(s.assigneeName || "وكيل")) : "—";
+    const assignee = s.assignee ? escHtml(s.assigneeName || "وكيل") : "—";
     return `#${escHtml(s.sid)} · ${s.lang === "en" ? "EN" : "ع"} · نشاط ${ago(s.updatedAt || s.createdAt)} · وكيل: ${assignee}`;
   });
   const buttons = list.slice(0, 10).map((s) => [{ text: "💬 " + s.sid, callback_data: "open:" + s.sid }]);
@@ -118,8 +108,8 @@ async function cmdChats(env, from, role) {
   });
 }
 
-async function cmdOpen(env, from, role, sid, callbackId) {
-  const sess = await findSessionBySid(env, sid);
+async function cmdOpen(env, db, from, role, sid, callbackId) {
+  const sess = await findSessionBySid(db, sid);
   if (!sess) {
     if (callbackId) await tgAnswerCallback(env, callbackId, "لم يتم العثور على المحادثة");
     return await tgSend(env, from.id, `❌ لا توجد محادثة مفتوحة بالمعرّف ${escHtml(sid)}. جرّب /chats`);
@@ -129,160 +119,153 @@ async function cmdOpen(env, from, role, sid, callbackId) {
     if (callbackId) await tgAnswerCallback(env, callbackId, "محادثة مُسندة لوكيل آخر");
     return await tgSend(env, from.id, `🔒 #${sess.sid} مُسندة لوكيل آخر — الكوأدمين يرد على المحادثات المسندة له فقط.`);
   }
-  if (sess.status !== "open") {
-    if (callbackId) await tgAnswerCallback(env, callbackId, "المحادثة مغلقة");
-    return await tgSend(env, from.id, `🔒 #${sess.sid} مغلقة بالفعل.`);
-  }
-
   const name = (from.first_name || from.username || "وكيل").slice(0, 60);
   const wasUnassigned = !sess.assignee;
   const previous = sess.assigneeName || null;
   sess.assignee = me;
   sess.assigneeName = name;
   sess.updatedAt = Date.now();
-  await putSession(env.SUPPORT_KV, sess);
-  await pushMsg(env.SUPPORT_KV, sess.k, "sys", "", { code: "joined", name });
-  await putStaff(env.SUPPORT_KV, me, { cur: sess.k, name, lastSeen: Date.now() });
+  await putSession(db, sess);
+  await pushMsg(db, sess.k, "sys", "", { code: "joined", name });
+  await putStaff(db, me, { cur: sess.k, name, lastSeen: Date.now() });
 
-  const context = await recentVisitorText(env, sess.k, sess.lang);
+  const context = await recentVisitorText(db, sess.k, sess.lang);
+  let pageNote = "";
+  try {
+    if (sess.page) {
+      const u = new URL(sess.page);
+      pageNote = " · من: " + escHtml(u.pathname.length > 30 ? u.pathname.slice(0, 30) + "…" : u.pathname);
+    }
+  } catch (e) { /* ignore malformed page */ }
   const header =
     `✅ أنت الآن ترد على <b>#${escHtml(sess.sid)}</b>` +
     (wasUnassigned ? "" : ` (نُقلت من ${escHtml(previous || "وكيل")})`) +
-    `\n🌐 ${sess.lang === "en" ? "English" : "العربية"} · ${sess.page ? "من: " + escHtml(shortPage(sess.page)) : ""}\n\n` +
+    `\n🌐 ${sess.lang === "en" ? "English" : "العربية"}${pageNote}\n\n` +
     `آخر رسائل الزائر:\n${context}\n\nاكتب رسالتك الآن — ستظهر للزائر مباشرة. عند الانتهاء: /done`;
   if (callbackId) await tgAnswerCallback(env, callbackId, "تم فتح " + sess.sid);
   return await tgSend(env, from.id, header);
 }
 
-function shortPage(url) {
-  try {
-    const u = new URL(url);
-    return u.pathname.length > 30 ? u.pathname.slice(0, 30) + "…" : u.pathname;
-  } catch (e) {
-    return String(url).slice(0, 30);
-  }
-}
-
-async function cmdAssign(env, from, role, sid, targetId) {
-  const sess = await findSessionBySid(env, sid);
+async function cmdAssign(env, db, from, role, sid, targetId) {
+  const sess = await findSessionBySid(db, sid);
   if (!sess) return await tgSend(env, from.id, `❌ لا توجد محادثة بالمعرّف ${escHtml(sid)}.`);
-  const targetRole = await roleOf(env.SUPPORT_KV, targetId);
+  const targetRole = await roleOf(db, targetId);
   if (targetRole === "none") {
     return await tgSend(env, from.id, `❌ <code>${escHtml(targetId)}</code> ليس من فريق الدعم — أعطه صلاحية أولاً (كوأدمين أو أدمن).`);
   }
-  const targetStaff = await getStaff(env.SUPPORT_KV, targetId);
+  const targetStaff = await getStaff(db, targetId);
   const name = targetStaff.name || "الوكيل";
   sess.assignee = String(targetId);
   sess.assigneeName = name;
   sess.updatedAt = Date.now();
-  await putSession(env.SUPPORT_KV, sess);
-  await pushMsg(env.SUPPORT_KV, sess.k, "sys", "", { code: "joined", name });
-  const context = await recentVisitorText(env, sess.k, sess.lang);
-  await putStaff(env.SUPPORT_KV, String(targetId), { ...targetStaff, cur: sess.k, lastSeen: Date.now() });
+  await putSession(db, sess);
+  await pushMsg(db, sess.k, "sys", "", { code: "joined", name });
+  const context = await recentVisitorText(db, sess.k, sess.lang);
+  await putStaff(db, String(targetId), { cur: sess.k, name, lastSeen: Date.now() });
   await tgSend(env, targetId, `📋 أُسندت إليك محادثة <b>#${escHtml(sess.sid)}</b>:\n${context}\n\nاكتب ردك مباشرة هنا. عند الانتهاء: /done`);
   return await tgSend(env, from.id, `✅ تم إسناد #${escHtml(sess.sid)} إلى ${escHtml(name)} (${ROLE_AR[targetRole]}).`);
 }
 
-async function cmdClose(env, from, role, sid) {
+async function cmdClose(env, db, from, role, sid) {
   const me = String(from.id);
-  let sess = sid ? await findSessionBySid(env, sid) : null;
+  let sess = sid ? await findSessionBySid(db, sid) : null;
   if (!sess && !sid) {
-    const staff = await getStaff(env.SUPPORT_KV, me);
-    if (staff.cur) sess = await getSession(env.SUPPORT_KV, staff.cur);
+    const staff = await getStaff(db, me);
+    if (staff.cur) sess = await getSession(db, staff.cur);
   }
   if (!sess) return await tgSend(env, from.id, "❌ حدد محادثة: /close SID (أو افتح محادثة أولاً بـ /open).");
   if (sess.status !== "open") return await tgSend(env, from.id, `#${sess.sid} مغلقة بالفعل.`);
   if (role === "coadmin" && String(sess.assignee) !== me) {
     return await tgSend(env, from.id, "🔒 الكوأدمين يغلق محادثاته المسندة فقط.");
   }
-  await closeSession(env, sess, "staff");
-  const staff = await getStaff(env.SUPPORT_KV, me);
-  if (staff.cur === sess.k) await putStaff(env.SUPPORT_KV, me, { ...staff, cur: null });
+  await closeSession(db, sess);
+  const staff = await getStaff(db, me);
+  if (staff.cur === sess.k) await putStaff(db, me, { ...staff, cur: null });
   if (sess.assignee && String(sess.assignee) !== me) {
     await tgSend(env, sess.assignee, `✅ #${escHtml(sess.sid)} أُغلقت بواسطة ${escHtml(from.first_name || "الأدمن")}.`);
   }
   return await tgSend(env, from.id, `✅ أُغلقت المحادثة #${escHtml(sess.sid)} — شكراً لك!`);
 }
 
-async function cmdRole(env, from, role, args) {
+async function cmdRole(env, db, from, role, args) {
   if (role !== "superadmin") {
     return await tgSend(env, from.id, "🔒 تفويض الصلاحيات متاح للسوبر أدمين فقط.");
   }
   const parts = args.trim().split(/\s+/).filter(Boolean);
-  if (!parts.length) {
-    const staff = await allStaffIds(env.SUPPORT_KV);
+  if (parts.length < 2) {
     return await tgSend(env, from.id, "الاستخدام: <code>/role ID admin|coadmin|none</code>");
   }
   const targetId = parts[0].replace(/[^\d]/g, "");
-  const action = (parts[1] || "").toLowerCase();
+  const action = parts[1].toLowerCase();
   if (!targetId || !["admin", "coadmin", "none"].includes(action)) {
     return await tgSend(env, from.id, "الاستخدام: <code>/role ID admin|coadmin|none</code>");
   }
   if (targetId === SUPERADMIN_SEED && action !== "admin") {
     return await tgSend(env, from.id, "⚠️ السوبر أدمين الرئيسي ثابت ولا يُخفض.");
   }
-  const roles = await getRoles(env.SUPPORT_KV);
-  roles.admins.delete(targetId);
-  roles.coadmins.delete(targetId);
-  if (action === "admin") roles.admins.add(targetId);
-  if (action === "coadmin") roles.coadmins.add(targetId);
-  await putRoles(env.SUPPORT_KV, roles);
-  const targetStaff = await getStaff(env.SUPPORT_KV, targetId);
-  await tgSend(env, targetId, `🔔 تم تحديث صلاحيتك في بوت دعم صيدة: <b>${ROLE_AR[action] === "بدون صلاحية" ? "بدون صلاحية" : ROLE_AR[action]}</b>. أرسل /help للاطلاع على الأوامر.`);
+  if (action === "none") {
+    // 'none' → remove the row entirely (roleOf defaults to none when absent)
+    await dbRun(db, "DELETE FROM roles WHERE tg_id = ?", [targetId]);
+    return await tgSend(env, from.id, `✅ صلاحية <code>${targetId}</code> أصبحت: <b>بدون صلاحية</b>`);
+  }
+  await setRole(db, targetId, action);
+  await tgSend(env, targetId, `🔔 تم تحديث صلاحيتك في بوت دعم صيدة: <b>${ROLE_AR[action]}</b>. أرسل /help للاطلاع على الأوامر.`);
   return await tgSend(env, from.id, `✅ صلاحية <code>${targetId}</code> أصبحت: <b>${ROLE_AR[action]}</b>`);
 }
 
-async function cmdAdmins(env, from, role) {
+async function cmdAdmins(env, db, from, role) {
   if (role === "none" || role === "coadmin") {
     return await tgSend(env, from.id, "🔒 متاح للأدمن فأعلى.");
   }
-  const staff = await allStaffIds(env.SUPPORT_KV);
+  const staff = await allStaffIds(db);
   const fmt = (ids, label) => ids.length ? `\n<b>${label}</b>:\n` + ids.map((i) => "<code>" + escHtml(i) + "</code>").join("\n") : "";
   const text = "👥 <b>فريق دعم صيدة</b>" + fmt(staff.superadmins, "سوبر أدمين") + fmt(staff.admins, "أدمن") + fmt(staff.coadmins, "كوأدمين");
   await tgSend(env, from.id, text);
 }
 
-async function cmdLeave(env, from) {
+async function cmdLeave(env, db, from) {
   const me = String(from.id);
-  const staff = await getStaff(env.SUPPORT_KV, me);
+  const staff = await getStaff(db, me);
   if (!staff.cur) return await tgSend(env, from.id, "لا توجد محادثة مرتبطة بك حالياً.");
-  await putStaff(env.SUPPORT_KV, me, { ...staff, cur: null });
+  await putStaff(db, me, { ...staff, cur: null });
   return await tgSend(env, from.id, "↩️ تم فك الارتباط بالمحادثة الحالية (لم تُغلق).");
 }
 
 // ---------- plain-text reply routing ----------
 
-async function handleReply(env, from, role, text) {
+async function handleReply(env, db, from, role, text) {
   const me = String(from.id);
-  const staff = await getStaff(env.SUPPORT_KV, me);
+  const staff = await getStaff(db, me);
   const name = (from.first_name || from.username || "وكيل").slice(0, 60);
-  await putStaff(env.SUPPORT_KV, me, { ...staff, name, lastSeen: Date.now() });
+  await putStaff(db, me, { ...staff, name, lastSeen: Date.now() });
 
   if (!staff.cur) {
     return await tgSend(env, from.id, "📌 لا توجد محادثة مرتبطة بك. اعرض المفتوحة بـ /chats ثم افتح واحدة بـ /open SID.");
   }
-  const sess = await getSession(env.SUPPORT_KV, staff.cur);
+  const sess = await getSession(db, staff.cur);
   if (!sess || sess.status !== "open") {
-    await putStaff(env.SUPPORT_KV, me, { ...staff, cur: null });
+    await putStaff(db, me, { ...staff, cur: null });
     return await tgSend(env, from.id, "🔒 المحادثة المرتبطة بك لم تعد مفتوحة. جرّب /chats");
   }
   if (role === "coadmin" && String(sess.assignee) !== me) {
     return await tgSend(env, from.id, `🔒 #${escHtml(sess.sid)} مُسندة لوكيل آخر — ردودك تُرسل لمحادثاتك فقط.`);
   }
-  await pushMsg(env.SUPPORT_KV, sess.k, "staff", text, { name });
+  await pushMsg(db, sess.k, "staff", text, { name });
   // keep the session "current" — staff may send several messages in a row
 }
 
 // ---------- update dispatch ----------
 
 async function handleUpdate(env, update) {
+  const db = env.SUPPORT_DB;
+
   // inline button: open:<sid>
   const cb = update.callback_query;
   if (cb && cb.data && cb.data.startsWith("open:")) {
     const from = cb.from || {};
-    const role = await roleOf(env.SUPPORT_KV, from.id);
+    const role = await roleOf(db, from.id);
     if (role === "none") return await tgAnswerCallback(env, cb.id, "غير مصرح — تواصل مع السوبر أدمين");
-    await cmdOpen(env, from, role, cb.data.slice(5), cb.id);
+    await cmdOpen(env, db, from, role, cb.data.slice(5), cb.id);
     return;
   }
 
@@ -297,10 +280,10 @@ async function handleUpdate(env, update) {
   const from = message.from || {};
   const id = String(from.id);
   const text = String(message.text || "").trim();
-  const role = await roleOf(env.SUPPORT_KV, id);
+  const role = await roleOf(db, id);
 
-  const staff = await getStaff(env.SUPPORT_KV, id);
-  await putStaff(env.SUPPORT_KV, id, { ...staff, name: (from.first_name || from.username || "").slice(0, 60), lastSeen: Date.now() });
+  const staff = await getStaff(db, id);
+  await putStaff(db, id, { ...staff, name: (from.first_name || from.username || "").slice(0, 60), lastSeen: Date.now() });
 
   if (/^\/(start|help)$/i.test(text)) return await tgSend(env, id, helpText(role, id));
   if (/^\/id$/i.test(text)) {
@@ -308,27 +291,28 @@ async function handleUpdate(env, update) {
   }
   if (role === "none") return await tgSend(env, id, helpText("none", id));
 
-  if (/^\/chats?$/i.test(text)) return await cmdChats(env, from, role);
-  if (/^\/open\s+(\S+)/i.test(text)) return await cmdOpen(env, from, role, text.match(/^\/open\s+(\S+)/i)[1], null);
+  if (/^\/chats?$/i.test(text)) return await cmdChats(env, db, from, role);
+  if (/^\/open\s+(\S+)/i.test(text)) return await cmdOpen(env, db, from, role, text.match(/^\/open\s+(\S+)/i)[1], null);
   if (/^\/(open|chat)$/i.test(text)) return await tgSend(env, id, "الاستخدام: /open SID — خذ المعرف من /chats");
   if (/^\/assign\s+(\S+)\s+(\d+)/i.test(text)) {
     const m = text.match(/^\/assign\s+(\S+)\s+(\d+)/i);
     if (role === "coadmin") return await tgSend(env, id, "🔒 الإسناد متاح للأدمن فأعلى.");
-    return await cmdAssign(env, from, role, m[1], m[2]);
+    return await cmdAssign(env, db, from, role, m[1], m[2]);
   }
   if (/^\/(close|done)(\s+\S+)?$/i.test(text)) {
     const m = text.match(/^\/(?:close|done)(?:\s+(\S+))?$/i);
-    return await cmdClose(env, from, role, m[1] || null);
+    return await cmdClose(env, db, from, role, m[1] || null);
   }
-  if (/^\/leave$/i.test(text)) return await cmdLeave(env, from);
-  if (/^\/role(\s|$)/i.test(text)) return await cmdRole(env, from, role, text.replace(/^\/role\s*/i, ""));
-  if (/^\/admins?$/i.test(text)) return await cmdAdmins(env, from, role);
+  if (/^\/leave$/i.test(text)) return await cmdLeave(env, db, from);
+  if (/^\/role(\s|$)/i.test(text)) return await cmdRole(env, db, from, role, text.replace(/^\/role\s*/i, ""));
+  if (/^\/admins?$/i.test(text)) return await cmdAdmins(env, db, from, role);
 
-  return await handleReply(env, from, role, text.slice(0, 1000));
+  return await handleReply(env, db, from, role, text.slice(0, 1000));
 }
 
 export async function onRequestPost(context) {
   const { request, env } = context;
+  if (!env || !env.SUPPORT_DB) return json(503, { ok: false });
 
   // webhook authenticity: secret token set at setWebhook time
   const secret = env.TG_WEBHOOK_SECRET;
