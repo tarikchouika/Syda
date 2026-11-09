@@ -12,7 +12,9 @@
   --cream:#fffaf0; --surface:#ffffff; --surface2:#fdf6e9;
   --ink:#17251e; --muted:#5f7168; --faint:#8aa094;
   --line:#e9e2cf; --line2:#dfd6bd;
-  --sale:#d63c2f; --sale2:#e8562f;
+  /* WCAG AA: both stops ≥4.5:1 with white text (measured 5.41 / 4.66),
+     and as text on cream 5.03:1 (save-badge, tier em) */
+  --sale:#c5341e; --sale2:#d0431f;
   --ok:#0e8a4d;
   --header-h:66px;
   --radius:14px; --radius-lg:22px; --radius-xl:28px;
@@ -21,7 +23,8 @@
   --shadow-3:0 16px 44px rgba(6,69,47,.22);
   --grad-hero:linear-gradient(135deg,#06452f 0%,#087a4b 55%,#0c8b57 100%);
   --grad-gold:linear-gradient(135deg,#d4a72c,#e8c04d);
-  --grad-btn:linear-gradient(180deg,#0c8b57,#087a4b);
+  /* WCAG AA: white text on the lighter stop measured 5.39:1 (was 4.33:1) */
+  --grad-btn:linear-gradient(180deg,#0b7a4a,#076640);
 }
 *{box-sizing:border-box}
 html{scroll-behavior:smooth}
@@ -74,7 +77,7 @@ html[dir=ltr] .header-search{direction:ltr}
 @keyframes menuIn{from{opacity:0;transform:translateY(-8px)}to{opacity:1;transform:none}}
 .site-menu a{display:block;padding:8px 12px;border-radius:10px;text-decoration:none;color:var(--ink);font-size:14px;font-weight:600;transition:background .15s,color .15s}
 .site-menu a:hover{background:var(--surface2);color:var(--g);padding-inline-start:16px}
-.menu-head{grid-column:1/-1;font-size:12px;font-weight:800;color:var(--gold);letter-spacing:1px;padding:4px 12px 8px;border-bottom:1px dashed var(--line2);margin-bottom:4px}
+.menu-head{grid-column:1/-1;font-size:12px;font-weight:800;color:#8a6a14;letter-spacing:1px;padding:4px 12px 8px;border-bottom:1px dashed var(--line2);margin-bottom:4px}
 /* category chips bar */
 .catbar{max-width:1320px;margin:0 auto;padding:0 20px 10px;display:flex;gap:8px;overflow-x:auto;scrollbar-width:none;-ms-overflow-style:none}
 .catbar::-webkit-scrollbar{display:none}
@@ -136,7 +139,7 @@ h2 small{color:var(--muted);font-weight:600;font-size:.65em;margin-inline-start:
 .card .body h3 a{color:var(--ink);text-decoration:none;transition:color .15s}
 .card .body h3 a:hover{color:var(--g)}
 .price{font-size:18px;font-weight:800;color:var(--d)}
-.old-price{font-size:13px;font-weight:600;color:var(--faint);text-decoration:line-through;margin-inline-start:7px}
+.old-price{font-size:13px;font-weight:600;color:var(--muted);text-decoration:line-through;margin-inline-start:7px}
 .save-badge{background:var(--surface2);color:var(--sale);font-size:11.5px;font-weight:800;border-radius:999px;padding:2px 9px;margin-inline-start:7px}
 .card-actions{display:flex;gap:8px;margin-top:auto;padding-top:6px}
 .card-actions .btn{flex:1;padding:10px 8px;font-size:13px}
@@ -251,7 +254,7 @@ hr{border:0;border-top:2px dashed var(--line2);margin:14px 0}
 .app-qr{background:#fff;border-radius:16px;padding:8px;width:104px;height:104px;display:flex;align-items:center;justify-content:center;box-shadow:var(--shadow-2)}
 .app-qr img{width:100%;height:100%;image-rendering:pixelated;border-radius:8px}
 .app-note{font-size:12px;opacity:.75;margin-top:8px}
-.app-note a{color:var(--gold3)}
+a.app-note,.app-note a{color:var(--gold3)}  /* gold3 on hero gradient ≈ 7.9:1 (base a{--g} was 1.81:1) */
 .phone-wrap{display:flex;justify-content:center;position:relative;z-index:1}
 .phone-mockup{width:min(230px,68vw);border-radius:34px;border:7px solid #0b2e20;background:#fff;box-shadow:var(--shadow-3),0 0 0 2px rgba(255,255,255,.12);overflow:hidden;aspect-ratio:9/18.5;position:relative}
 .phone-mockup:before{content:"";position:absolute;top:8px;left:50%;transform:translateX(-50%);width:84px;height:20px;border-radius:999px;background:#0b2e20;z-index:3}
@@ -420,7 +423,7 @@ body:has(.mobile-buybar){padding-bottom:80px}
 .stock-line{display:flex}
 .stock-chip{display:inline-flex;align-items:center;gap:6px;background:rgba(8,122,75,.09);border:1px solid rgba(8,122,75,.28);color:var(--g);border-radius:999px;padding:5px 14px;font-size:12.5px;font-weight:800}
 .cta-note{font-size:13px;font-weight:700;color:var(--muted);text-align:center;line-height:1.7}
-.total-note{font-size:12.5px;font-weight:700;color:var(--faint)}
+.total-note{font-size:12.5px;font-weight:700;color:var(--muted)}
 body.dark .bulk-hint{background:rgba(212,160,44,.09);color:var(--gold);border-color:var(--gold)}
 body.dark .stock-chip{background:rgba(8,122,75,.2)}
 body.dark .cta-note,body.dark .total-note{color:var(--faint)}
@@ -429,7 +432,7 @@ body.dark .cta-note,body.dark .total-note{color:var(--faint)}
 .stock-line{gap:8px;flex-wrap:wrap}
 .urgency{display:inline-flex;align-items:center;gap:6px;background:linear-gradient(135deg,rgba(211,47,47,.10),rgba(211,47,47,.04));border:1px solid rgba(211,47,47,.35);color:#b3261e;border-radius:999px;padding:5px 14px;font-size:12.5px;font-weight:800}
 .cta-row{display:flex;gap:10px;flex-direction:column}
-.btn.buy{background:linear-gradient(135deg,#0aa565,var(--g));color:#fff;box-shadow:0 6px 18px rgba(8,122,75,.4);animation:buyPulse 2.4s ease-in-out infinite}
+.btn.buy{background:linear-gradient(135deg,#088954,var(--g));color:#fff;box-shadow:0 6px 18px rgba(8,122,75,.4);animation:buyPulse 2.4s ease-in-out infinite}
 .btn.buy:hover{filter:brightness(1.07);box-shadow:0 8px 24px rgba(8,122,75,.5)}
 .btn.outline{background:#fff;color:var(--g);border:2px solid var(--g);box-shadow:none}
 .btn.outline:hover{background:rgba(8,122,75,.07);transform:translateY(-1px)}
@@ -446,3 +449,57 @@ body.dark .tier-chip.best{background:linear-gradient(180deg,#243019,#2c2a12)}
 .offer-note{display:inline-flex;align-items:center;gap:7px;background:linear-gradient(135deg,rgba(212,167,44,.16),rgba(212,167,44,.06));border:1.5px solid rgba(212,167,44,.55);color:#7a5a0a;border-radius:999px;padding:6px 15px;font-size:13.5px;font-weight:800;align-self:flex-start}
 .offer-note:hover{filter:brightness(.97)}
 body.dark .offer-note{background:rgba(212,167,44,.14);color:#f0d78e}
+
+/* ===================== WCAG AA CONTRAST GUARANTEE (2026-11-09) =====================
+   Measured fixes for theme-switch visibility bugs. Every rule below was verified
+   with a browser-computed contrast audit (scripts/audit_contrast.js); ratios noted
+   are worst-case over the surfaces each element actually renders on.
+   Palette stays on-brand: ink #e8f0ea, light green #8fe0b4, light red #ff9d8d,
+   muted #a3b8ac — all ≥6.2:1 on every dark surface. */
+
+/* --- header dropdown menu: was white-fixed → invisible links in dark (1.16:1) --- */
+body.dark .site-menu{background:#13241b;border-color:#2d4436;box-shadow:0 16px 44px rgba(0,0,0,.55)}
+body.dark .site-menu a:hover{background:#1a2f23;color:#8fe0b4}
+body.dark .menu-head{color:var(--gold)}
+
+/* --- offer/pricing cards: small labels were dark-on-dark (1.26:1) --- */
+body.dark .tiers-title{color:var(--ink)}                 /* 13.79:1 on buybox */
+body.dark .tier-chip small{color:var(--ink)}             /* 11.95:1 on chip bg */
+body.dark .tier-chip em{color:#ff9d8d}                   /* 6.91:1 on chip bg */
+body.dark .tier-chip.best em{color:#ff9d8d}              /* 7.08:1 on best gradient */
+
+/* --- product page: title / price / totals / stock were dark-on-dark --- */
+body.dark .info h1{color:var(--ink)}                     /* 13.79:1 */
+body.dark .price-row .price{color:#8fe0b4}               /* 10.29:1 on buybox */
+body.dark .total-line b{color:#8fe0b4}                   /* 10.29:1 */
+body.dark .stock-chip{color:#8fe0b4}                     /* 8.9:1 on its tinted bg */
+body.dark .cat-pill{color:#8fe0b4}
+body.dark .crumbs a{color:#8fe0b4}                       /* 11.75:1 on cream-dark */
+
+/* --- card grid: prices and category pills were dark-on-dark (1.47 / 2.64:1) --- */
+body.dark .price{color:#8fe0b4}
+body.dark .card-cat{color:#8fe0b4}
+body.dark .price .save-badge{color:#ff9d8d}              /* 7.09:1 on surface2 */
+body.dark .old-price{color:var(--muted)}                 /* 6.79:1 */
+body.dark .total-note{color:var(--muted)}
+body.dark .cta-note{color:var(--muted)}
+
+/* --- section headings (h2 الأقسام …) were 1.47–1.65:1 --- */
+body.dark h2{color:var(--ink)}
+body.dark .description h2{color:var(--ink)}
+
+/* --- catalog filter label was 1.47:1 --- */
+body.dark .catalog-controls label{color:var(--ink)}
+
+/* --- best-badge keeps its gold gradient + dark text (8.9:1) — no change needed --- */
+
+/* --- footer "download app" gold button was gold-on-gold (1.14:1) via the
+       .site-footer a{color:var(--gold)!important} blanket rule --- */
+.site-footer a.btn,.site-footer a.btn:hover{color:#231a02!important}
+
+/* --- feature strip cards: titles + icon discs were light-theme-fixed in dark --- */
+body.dark .feature b{color:var(--ink)}                       /* 13.95:1 on dark card */
+body.dark .feature .icon{background:linear-gradient(135deg,#1a2f23,#23392b);border-color:#2d4436}
+/* --- pagination buttons: dark text on dark surface (1.47:1) --- */
+body.dark #pagination button{color:var(--ink);border-color:var(--line2);background:var(--surface)}
+body.dark #pagination button:hover:not(:disabled){background:#1a2f23;color:#8fe0b4}
